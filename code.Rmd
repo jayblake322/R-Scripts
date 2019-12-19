@@ -1,0 +1,579 @@
+---
+title: "Brisbane Property Market Update"
+author: "Place Advisory"
+output:
+  rmarkdown::html_document:
+    theme: spacelab
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+```{r Libraries, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(ggmap)
+library(kableExtra)
+library(sf)
+library(tidyverse)
+library(mapview)
+library(devtools)
+library(lwgeom)
+library(jpeg)
+
+# CAGR Function
+
+CAGR <- function(fv,pv,n){
+  GR <- ((fv/pv)^(1/n))-1
+  paste(round(GR * 100, 2), "%", sep = "")
+}
+
+```
+
+```{r Load Data, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+region_rollup <- read.csv("sales_data_september_2018.csv", sep = ",", header = TRUE)
+
+building_data <- read.csv("building database 7 november 2018.csv", sep = ",", header = TRUE)
+
+inner_ring_sales_data <- read.csv("inner ring sales data.csv", sep = ",", header = TRUE)
+```
+
+```{r region_rollup data clean, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+# Clean region rollup data 
+
+names(region_rollup) = c("period", "volume", "price", "region", "type") # set variable names
+
+# manipulate price variable 1st step
+region_rollup_clean <- region_rollup %>%
+  mutate(price = gsub("[$]", "", price)) # remove "$"
+
+# manipulate price variable 2nd step  
+region_rollup_clean <- region_rollup_clean %>%
+  mutate(price = as.integer(gsub("[,]", "", price))) %>% # remove ","
+  mutate(period = as.ordered(period)) # set ordered levels of period
+
+```
+
+```{r building data clean, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+building_data_clean <- building_data %>%
+  select(1,3,6,9:10) 
+
+names(building_data_clean) <- c("building_number", "type", "suburb", "lat", "lon")
+
+building_data_clean <- building_data_clean %>%
+  mutate(plan_number = as.character(building_number))
+
+```
+
+```{r Load Header Image, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE, fig.align="centre", fig.height=10, fig.width=20}
+
+header_image <- readJPEG("story-bridge-1021658.jpg")
+
+plot(1:2, type='n', xlab="", ylab="", axes=FALSE) 
+rasterImage(header_image,1,1,2,2)
+```
+
+
+In recent years **the Brisbane property market** has very rarely seen the positive limelight, however, given the Sydney and Melbourne markets are softening, Brisbane is finally coming into its own. Brisbane has been moving along steadily over recent years without major decline nor gain. Certainly, there have been sub-markets which have underperformed, namely the apartment market, whilst there has been periods of strength seen in the housing market.
+
+We have taken a more detailed look at the Brisbane property market and the performance of the region's house, townhouse and apartment markets. **Click on the tabs below to check your region!** 
+
+&nbsp;  
+
+###### A Quick Note
+
+*In contrast to other reports about the Inner Brisbane unit market, Place Advisory has split the Inner Brisbane property market into three property types:  Houses, Townhouses and Apartments. This breakdown of markets provides a much deeper insight into the performance of property in Brisbane, allowing you to be better informed into what is really happening in the current property climate.*
+
+&nbsp;  
+
+## Brisbane Region Property Performance {.tabset .tabset-fade .tabset-pills}
+
+### Inner Ring
+
+**Brisbane's Inner Ring** house, apartment and townhouse markets have followed a similar trend to each other over the past 10 years. However, as the apartment and townhouse markets were more affected by the extent of new unit supply, they did not increase in price to the same extent as the housing market. Median prices began to soften for all three of these markets in recent periods with the housing market recording a median price of **$900,000** which is **-2.17** lower than one year prior. The apartment market softened **-2.85%** to **$480,000** as at the end of September 2018, whilst the townhouse market declined by **-5.26%** to **$544,750** during the same timeframe despite being the only market to increase in median price during the last six months ending September 2018. 
+
+All three markets have seen the number of sales decline  since the September 2015, mostly as a result of the current credit crunch by the banks. Due to the huge increase in unit sales volumes from 2013 to 2016, the apartment market has seen the largest decline in sales volumes over the past three years. During the September 2018 six month period, there were **730 house sales,  1,486 apartment sales and 186 townhouse sales**.
+
+
+```{r select data with all 3 types, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+inner_ring_all_types <- region_rollup_clean %>%
+  filter(region == "Inner Ring") %>% # select only inner ring
+  filter(period > "2008 March") %>% # select 2008 september onwards
+  filter(type != "Unit") %>% # exclude units
+  select(1:3,5) # drop region variable
+
+```
+
+```{r clean inner ring sales data, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+inner_ring_sales_data_clean <- inner_ring_sales_data %>%
+  select(5,8:9,14,20:21,25:26) %>% # select only desired variables
+  mutate(building_number = as.character(Building.Lot.Number)) %>% 
+  mutate(price = gsub("[$]", "", Sale.Price)) %>%
+  mutate(period = as.ordered(X6.Month.Period)) %>% 
+  mutate(first_resale_growth = as.numeric(gsub("[%]", "", X1st.resale.capital.growth))) %>% # remove "%"
+  mutate(existing_resale_growth = as.numeric(gsub("[%]", "", Existing.Capital.Growth))) # remove "%"      
+
+inner_ring_sales_data_clean <- inner_ring_sales_data_clean %>%
+  select(1,3,6,9:13) %>% # select only desired variables
+  mutate(price = as.integer(gsub("[,]", "", price)))  # remove "," and set as integer
+
+# rename columns
+
+names(inner_ring_sales_data_clean) <- c("suburb", "type", "status", "building_number", "price", "period", "first_resale_growth", "existing_resale_growth") 
+```
+
+```{r join building and inner ring sales data, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+# joine building and sales data
+inner_ring_sales_data_joined <- left_join(inner_ring_sales_data_clean, building_data_clean, by = "building_number")
+
+# drop duplicated variables
+
+inner_ring_sales_data_joined <- select(inner_ring_sales_data_joined, -c("type.y", "suburb.y"))
+
+
+inner_ring_sales_data_joined <- inner_ring_sales_data_joined %>%
+  mutate(suburb = suburb.x) %>% # change name of variable
+  mutate(type = type.x) %>% # change name of variable
+  select(-c("type.x", "suburb.x")) # drop variables with undesirable name
+
+```
+
+```{r Inner Ring All Types Graph, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE, fig.align="centre", fig.width=9, fig.height=5}
+
+group_colours2 <- c("cyan4", "dodgerblue3", "blue4")
+
+inner_ring_all_types_graph <- ggplot(inner_ring_all_types) + 
+  geom_bar(mapping = aes(x = period, y = volume, fill = type), stat = "identity", position = "dodge") +
+  geom_line(mapping = aes(x = period, y = price/200, group = type, colour = type), lwd = 1.3) + # set scale for line and split by type
+  scale_y_continuous(sec.axis = sec_axis(~ . * 200, labels = scales::comma, name = "Median Sale Price ($)")) + # set secondary y-axis
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) + # adjust x-axis labels 
+  labs(title = "Townhouses Rebound, Apartments Flat, Houses Decline", 
+       x = "Six Month Period", 
+       y = "Number of Sales", 
+       caption = "Prepared by Place Advisory. Source: PriceFinder") +
+  theme(legend.title = element_blank())
+
+inner_ring_all_types_graph + scale_fill_manual(values = group_colours2)
+
+```
+
+```{r All Types Growth Rates and Prices Table , echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+
+# Get House Data for the Table
+price_2008_inner_house1 <- inner_ring_all_types[inner_ring_all_types$period == "2008 September" & inner_ring_all_types$type == "House", 3]
+price_2013_inner_house1 <- inner_ring_all_types[inner_ring_all_types$period == "2013 September" & inner_ring_all_types$type == "House", 3]
+price_2017_inner_house1 <- inner_ring_all_types[inner_ring_all_types$period == "2017 September" & inner_ring_all_types$type == "House", 3]
+price_2018_inner_house1 <- inner_ring_all_types[inner_ring_all_types$period == "2018 September" & inner_ring_all_types$type == "House", 3]
+
+# Get Townhouse Data for the table
+
+price_2008_inner_th1 <- inner_ring_all_types[inner_ring_all_types$period == "2008 September" & inner_ring_all_types$type == "Townhouses", 3]
+
+price_2013_inner_th1 <- inner_ring_all_types[inner_ring_all_types$period == "2013 September" & inner_ring_all_types$type == "Townhouses", 3]
+
+price_2017_inner_th1 <- inner_ring_all_types[inner_ring_all_types$period == "2017 September" & inner_ring_all_types$type == "Townhouses", 3]
+
+price_2018_inner_th1 <- inner_ring_all_types[inner_ring_all_types$period == "2018 September" & inner_ring_all_types$type == "Townhouses", 3]
+
+# Get Apartment Data for the table
+
+price_2008_inner_apt1 <- inner_ring_all_types[inner_ring_all_types$period == "2008 September" & inner_ring_all_types$type == "Apartments", 3]
+price_2013_inner_apt1 <- inner_ring_all_types[inner_ring_all_types$period == "2013 September" & inner_ring_all_types$type == "Apartments", 3]
+price_2017_inner_apt1 <- inner_ring_all_types[inner_ring_all_types$period == "2017 September" & inner_ring_all_types$type == "Apartments", 3]
+price_2018_inner_apt1 <- inner_ring_all_types[inner_ring_all_types$period == "2018 September" & inner_ring_all_types$type == "Apartments", 3]
+
+# House growth rates
+
+inner_one_rate_house1 <- CAGR(price_2018_inner_house1,  price_2017_inner_house1, 1)
+inner_five_rate_house1 <- CAGR(price_2018_inner_house1,  price_2013_inner_house1, 5)
+inner_10_rate_house1 <- CAGR(price_2018_inner_house1,  price_2008_inner_house1, 10)
+
+# Townhouse growth rates
+
+inner_one_rate_th1 <- CAGR(price_2018_inner_th1,  price_2017_inner_th1, 1)
+inner_five_rate_th1 <- CAGR(price_2018_inner_th1,  price_2013_inner_th1, 5)
+inner_10_rate_th1 <- CAGR(price_2018_inner_th1,  price_2008_inner_th1, 10)
+
+# Apartment Growth Rates
+
+inner_one_rate_apt1 <- CAGR(price_2018_inner_apt1,  price_2017_inner_apt1, 1)
+inner_five_rate_apt1 <- CAGR(price_2018_inner_apt1,  price_2013_inner_apt1, 5)
+inner_10_rate_apt11 <- CAGR(price_2018_inner_apt1,  price_2008_inner_apt1, 10)
+
+# Format values for the table
+
+price_2008_inner_house1 <- (format(price_2008_inner_house1, big.mark = ","))
+price_2013_inner_house1 <- (format(price_2013_inner_house1, big.mark = ","))
+price_2017_inner_house1 <- (format(price_2017_inner_house1, big.mark = ","))
+price_2018_inner_house1 <- (format(price_2018_inner_house1, big.mark = ","))
+price_2008_inner_th1 <- (format(price_2008_inner_th1, big.mark = ","))
+price_2013_inner_th1 <- (format(price_2013_inner_th1, big.mark = ","))
+price_2017_inner_th1 <- (format(price_2017_inner_th1, big.mark = ","))
+price_2018_inner_th1 <- (format(price_2018_inner_th1, big.mark = ","))
+price_2008_inner_apt1 <- (format(price_2008_inner_apt1, big.mark = ","))
+price_2013_inner_apt1 <- (format(price_2013_inner_apt1, big.mark = ","))
+price_2017_inner_apt1 <- (format(price_2017_inner_apt1, big.mark = ","))
+price_2018_inner_apt1 <- (format(price_2018_inner_apt1, big.mark = ","))
+
+# put values into vectors
+
+one_inner <- c(paste("$", price_2008_inner_house1, sep = ""), paste("$", price_2008_inner_th1, sep = ""), paste("$", price_2008_inner_apt1, sep = ""))
+
+two_inner <- c(paste("$", price_2013_inner_house1, sep = ""), paste("$", price_2013_inner_th1, sep = ""), paste("$", price_2013_inner_apt1, sep = ""))
+
+three_inner <- c(paste("$", price_2017_inner_house1, sep = ""), paste("$", price_2017_inner_th1, sep = ""), paste("$", price_2017_inner_apt1, sep = ""))
+
+four_inner <- c(paste("$", price_2018_inner_house1, sep = ""), paste("$", price_2018_inner_th1, sep = ""), paste("$", price_2018_inner_apt1, sep = ""))
+
+five_inner <- c(inner_10_rate_house1, inner_10_rate_th1, inner_10_rate_apt11)  
+
+six_inner <- c(inner_five_rate_house1, inner_five_rate_th1, inner_five_rate_apt1)  
+
+seven_inner <- c(inner_one_rate_house1, inner_one_rate_th1, inner_one_rate_apt1)  
+
+inner_ring_table <- as.data.frame(cbind(one_inner, two_inner, three_inner, four_inner, five_inner, six_inner, seven_inner))
+
+names(inner_ring_table) <- c("2008 Sep Price", "2013 Sep Price", "2017 Sep Price", "2018 Sep Price", "10 Year Growth Rate", "5 Year Growth Rate", "1 Year Grwoth Rate")
+
+kable(inner_ring_table, align = "c") %>%
+  kable_styling(full_width = F) %>%
+  footnote(general = "Source: PriceFinder")
+
+```
+
+
+
+&nbsp;
+
+### Middle Ring
+
+**The Middle Ring** of Brisbane's property market has been a steady performer over the past five years. Houses here have increased by an average of **5.13%** per annum over this time whilst unit prices have increased by an average of just under **1%**. Similar to the rest of Brisbane, this region is currently seeing sales volumes decline, again and more pronounced in the unit market. During the September 2018 six month period there were **1,705 house sales** and  **1,161 unit sales**. Despite the declining rate of sales, they are falling from a record peak and now sit much closer to long term average volumes.
+
+Over the past year, the Brisbane Middle Ring property market softened slightly with houses declining by **0.67%** to sit at **$745,000** and units declining by **-3.33%** to record a median price of **$435,000**.
+
+```{r Middle Ring Graph, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE, fig.align="centre", fig.width=9, fig.height=5}
+
+# filter only middle ring houses and units
+
+group_colours <- c("cyan4", "dodgerblue3")
+
+middle_ring <- region_rollup_clean %>%
+  filter(region == "Middle Ring") %>% # select only middle ring data
+  filter(period > "2008 March") %>% # select only periods from 2009 september onwards
+  filter(type == "House" | type == "Unit") %>% # select only houses and units
+  select(1:3,5) # drop region variable
+
+middle_ring_graph <- ggplot(middle_ring) +
+  geom_bar(mapping = aes(x = period, y = volume, fill = type), stat = "identity", position = "dodge") + 
+  geom_line(aes(x = period, y = price/150, group = type, colour = type), lwd = 1.3) + # plot lines and split by type and set scale
+  scale_y_continuous(sec.axis = sec_axis(~. *150, labels = scales::comma, name = "Median Sale Price ($)")) + # apply secondary y-axis with scale
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) + # adjust x-axis labels
+  labs(title = "House and Unit Prices Continue to Soften",
+       y = "Number of Sales",
+       x = "Six Month Period",
+       caption = "Prepared by Place Adviosry. Source: PriceFinder.") +
+  theme(legend.title = element_blank())
+
+middle_ring_graph + scale_fill_manual(values = group_colours)
+
+```
+
+&nbsp;
+
+```{r Growth Rates and Prices Table Middle Ring, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+price_2008_middle_house <- middle_ring[middle_ring$period == "2008 September" & middle_ring$type == "House", 3]
+price_2013_middle_house <- middle_ring[middle_ring$period == "2013 September" & middle_ring$type == "House", 3]
+price_2017_middle_house <- middle_ring[middle_ring$period == "2017 September" & middle_ring$type == "House", 3]
+price_2018_middle_house <- middle_ring[middle_ring$period == "2018 September" & middle_ring$type == "House", 3]
+
+price_2008_middle_unit <- middle_ring[middle_ring$period == "2008 September" & middle_ring$type == "Unit", 3]
+price_2013_middle_unit <- middle_ring[middle_ring$period == "2013 September" & middle_ring$type == "Unit", 3]
+price_2017_middle_unit <- middle_ring[middle_ring$period == "2017 September" & middle_ring$type == "Unit", 3]
+price_2018_middle_unit <- middle_ring[middle_ring$period == "2018 September" & middle_ring$type == "Unit", 3]
+
+middle_one_rate_house <- CAGR(price_2018_middle_house,  price_2017_middle_house, 1)
+middle_five_rate_house <- CAGR(price_2018_middle_house,  price_2013_middle_house, 5)
+middle_10_rate_house <- CAGR(price_2018_middle_house,  price_2008_middle_house, 10)
+
+middle_one_rate_unit <- CAGR(price_2018_middle_unit,  price_2017_middle_unit, 1)
+middle_five_rate_unit <- CAGR(price_2018_middle_unit,  price_2013_middle_unit, 5)
+middle_10_rate_unit <- CAGR(price_2018_middle_unit,  price_2008_middle_unit, 10)
+
+price_2008_middle_house <- (format(price_2008_middle_house, big.mark = ","))
+price_2013_middle_house <- (format(price_2013_middle_house, big.mark = ","))
+price_2017_middle_house <- (format(price_2017_middle_house, big.mark = ","))
+price_2018_middle_house <- (format(price_2018_middle_house, big.mark = ","))
+price_2008_middle_unit <- (format(price_2008_middle_unit, big.mark = ","))
+price_2013_middle_unit <- (format(price_2013_middle_unit, big.mark = ","))
+price_2017_middle_unit <- (format(price_2017_middle_unit, big.mark = ","))
+price_2018_middle_unit <- (format(price_2018_middle_unit, big.mark = ","))
+
+one_middle <- c(paste("$", price_2008_middle_house, sep = ""), paste("$", price_2008_middle_unit, sep = ""))
+two_middle <- c(paste("$", price_2013_middle_house, sep = ""), paste("$", price_2013_middle_unit, sep = ""))
+three_middle <- c(paste("$", price_2017_middle_house, sep = ""), paste("$", price_2017_middle_unit, sep = ""))
+four_middle <- c(paste("$", price_2018_middle_house, sep = ""), paste("$", price_2018_middle_unit, sep = ""))
+five_middle <- c(middle_10_rate_house, middle_10_rate_unit)  
+six_middle <- c(middle_five_rate_house, middle_five_rate_unit)  
+seven_middle <- c(middle_one_rate_house, middle_one_rate_unit)  
+
+middle_ring_table <- as.data.frame(cbind(one_middle, two_middle, three_middle, four_middle, five_middle, six_middle, seven_middle))
+
+names(middle_ring_table) <- c("2008 Sep Price", "2013 Sep Price", "2017 Sep Price", "2018 Sep Price", "10 Year Growth Rate", "5 Year Growth Rate", "1 Year Grwoth Rate")
+
+kable(middle_ring_table, align = "c") %>%
+  kable_styling(full_width = F) %>%
+  footnote(general = "Prepared by Place Advisory. Source: PriceFinder")
+```
+
+&nbsp;
+
+### Outer Ring
+
+Due to the lower price point of **Brisbane's Outer Ring** property market, fluctuation in prices have been less prevalent. Despite this, the last 12 months have seen unit prices fall by **-3.57%** to record a median price of **$371,250**. Over the median term, prices have been fairly steady, increasing in price by a modest **0.34%** per annum over the last five years. There were **972 unit sales** during the six months to September 2018.
+
+Houses in Brisbane's Outer Ring have recorded the strongest returns of all assets in the past 12 months. Compared to the September period 2017, house prices are **0.35%** higher at a median price of **$580,000**. Despite the modest growth rate, it is the only property type of the three regions to increase in price over the last 12 months. There were **3,010 house sales** during the six month period ending September 2018.
+```{r Outer Ring Graph, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE, fig.align="centre", fig.width=9, fig.height=5}
+
+# filter only outer ring houses and units
+
+outer_ring <- region_rollup_clean %>%
+  filter(type == "House" | type == "Unit") %>%  # select only houses and units
+  filter(period > "2008 March") %>%# select only periods from 2009 september onwards
+  filter(region != "Inner Ring" & region != "Middle Ring") %>% # select only middle ring data
+  select(1:3,5) # drop region variable
+
+  
+outer_ring_graph <- ggplot(outer_ring) +
+  geom_bar(mapping = aes(x = period, y = volume, fill = type), stat = "identity", position = "dodge") + 
+  geom_line(aes(x = period, y = price/125, group = type, colour = type), lwd = 1.3) + # plot lines and split by type
+  scale_y_continuous(sec.axis = sec_axis(~. *125, labels = scales::comma, name = "Median Sale Price ($)")) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  labs(title = "House Prices are flat as Unit Prices Continue to Soften",
+       y = "Number of Sales",
+       x = "Six Month Period",
+       caption = "Prepared by Place Adviosry. Source: PriceFinder.") +
+  theme(legend.title = element_blank()) 
+  
+ 
+
+outer_ring_graph + scale_fill_manual(values = group_colours)
+```
+
+&nbsp;
+
+```{r Growth Rates and Prices Table Outer Ring, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+
+price_2008_outer_house <- outer_ring[outer_ring$period == "2008 September" & outer_ring$type == "House", 3]
+price_2013_outer_house <- outer_ring[outer_ring$period == "2013 September" & outer_ring$type == "House", 3]
+price_2017_outer_house <- outer_ring[outer_ring$period == "2017 September" & outer_ring$type == "House", 3]
+price_2018_outer_house <- outer_ring[outer_ring$period == "2018 September" & outer_ring$type == "House", 3]
+
+price_2008_outer_unit <- outer_ring[outer_ring$period == "2008 September" & outer_ring$type == "Unit", 3]
+price_2013_outer_unit <- outer_ring[outer_ring$period == "2013 September" & outer_ring$type == "Unit", 3]
+price_2017_outer_unit <- outer_ring[outer_ring$period == "2017 September" & outer_ring$type == "Unit", 3]
+price_2018_outer_unit <- outer_ring[outer_ring$period == "2018 September" & outer_ring$type == "Unit", 3]
+
+outer_one_rate_house <- CAGR(price_2018_outer_house,  price_2017_outer_house, 1)
+outer_five_rate_house <- CAGR(price_2018_outer_house,  price_2013_outer_house, 5)
+outer_10_rate_house <- CAGR(price_2018_outer_house,  price_2008_outer_house, 10)
+
+outer_one_rate_unit <- CAGR(price_2018_outer_unit,  price_2017_outer_unit, 1)
+outer_five_rate_unit <- CAGR(price_2018_outer_unit,  price_2013_outer_unit, 5)
+outer_10_rate_unit <- CAGR(price_2018_outer_unit,  price_2008_outer_unit, 10)
+
+price_2008_outer_house <- (format(price_2008_outer_house, big.mark = ","))
+price_2013_outer_house <- (format(price_2013_outer_house, big.mark = ","))
+price_2017_outer_house <- (format(price_2017_outer_house, big.mark = ","))
+price_2018_outer_house <- (format(price_2018_outer_house, big.mark = ","))
+price_2008_outer_unit <- (format(price_2008_outer_unit, big.mark = ","))
+price_2013_outer_unit <- (format(price_2013_outer_unit, big.mark = ","))
+price_2017_outer_unit <- (format(price_2017_outer_unit, big.mark = ","))
+price_2018_outer_unit <- (format(price_2018_outer_unit, big.mark = ","))
+
+one_outer <- c(paste("$", price_2008_outer_house, sep = ""), paste("$", price_2008_outer_unit, sep = ""))
+two_outer <- c(paste("$", price_2013_outer_house, sep = ""), paste("$", price_2013_outer_unit, sep = ""))
+three_outer <- c(paste("$", price_2017_outer_house, sep = ""), paste("$", price_2017_outer_unit, sep = ""))
+four_outer <- c(paste("$", price_2018_outer_house, sep = ""), paste("$", price_2018_outer_unit, sep = ""))
+five_outer <- c(outer_10_rate_house, outer_10_rate_unit)  
+six_outer <- c(outer_five_rate_house, outer_five_rate_unit)  
+seven_outer <- c(outer_one_rate_house, outer_one_rate_unit)  
+
+outer_ring_table <- as.data.frame(cbind(one_outer, two_outer, three_outer, four_outer, five_outer, six_outer, seven_outer))
+
+names(outer_ring_table) <- c("2008 Sep Price", "2013 Sep Price", "2017 Sep Price", "2018 Sep Price", "10 Year Growth Rate", "5 Year Growth Rate", "1 Year Grwoth Rate")
+
+kable(outer_ring_table, align = "c") %>%
+  kable_styling(full_width = F) %>%
+  footnote(general = "Prepared by Place Adviosry. Source: PriceFinder.")
+
+```
+
+&nbsp;  
+
+
+
+## A Look at Townhouse and Apartment Sales
+
+The map below shows all townhouse and apartment sales during the September 2018 six month period throughout Brisbane's Inner Ring. The points are coloured by property type and the sizes are scaled based on sale price. 
+
+The graph illustrates that there has been a higher proportion of apartment sales within Kangaroo Point, New Farm and Newstead, whilst the most expensive sales can be found right along the Brisbane River. Naturally, townhouse sales occur more on the outskirts of the Inner Ring due to a smaller proportion of townhouses existing closer to the CBD. It is clear from the graph that the majority of apartment sales have occured in suburbs that have experienced large levels of apartment development in recent years such as West End, South Brisbane, Kangaroo Point, and Newstead.
+
+
+```{r sep 2018 unit sales map, fig.align="centre", echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+
+# select september 2008 data
+inner_ring_sep_2018 <- inner_ring_sales_data_joined %>%
+  filter(period == "2018 September") %>%
+  filter(type != "House")
+
+# set spatial data with sf
+
+Inner_Ring_Sales = inner_ring_sep_2018 %>%
+  select(3,7:8,10:11) %>%
+  st_as_sf(coords = c("lon", "lat"), crs = 4326) 
+
+
+mapview(Inner_Ring_Sales, 
+        cex = "price",
+        zcol = "type",
+        legend = TRUE, #add a legend
+        layer.name = "Unit Type") #label the legend
+
+```
+
+&nbsp;
+
+## Capital Growth and Profit and Loss {.tabset .tabset-fade .tabset-pills}
+
+```{r Load and clean profit data, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+# load data
+
+inner_ring_profits <- read.csv("sep2018 inner ring losses and profits.csv", sep = ",", header = TRUE)
+
+# clean data step 1
+
+inner_ring_profits_clean <- inner_ring_profits %>%
+  mutate(Building.Lot.Number = as.character(Building.Lot.Number)) %>% # set as character
+  mutate(Sale.Price = gsub("[$]", "", Sale.Price)) # exclude "$"
+
+# clean data step 2
+
+inner_ring_profits_clean <- inner_ring_profits_clean %>%
+  mutate(Sale.Price = as.integer(gsub("[,]", "", Sale.Price))) #set as integer and exclude ","
+
+# set variable names
+
+names(inner_ring_profits_clean) <- c("suburb", "plan_number", "type", "price", "previous_price", "profit", "status", "annual_growth", "lat", "lon")
+
+```
+
+
+### Inner Ring Unit Sales: Profits and Losses
+
+As Inner Brisbane property market prices have been softening it is inevitable that losses will be made on properties when they are resold. During the last six months to September 2018, there were **1,056 Inner Ring units resold**. Of these, **392 were resold for the very first time**. Looking a little deeper, **33.6%** of all resales were **sold at a loss** confirming the weakness in the market over recent periods. However, as prices stabilise and begin to increase, the proportion of losses will decrease. 
+
+**The map below is interactive. Zoom and scroll around to see where profits and losses have occured throughout Brisbane's Inner Ring.**
+
+
+```{r profit and loss summary, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+profit_loss_summary <- inner_ring_profits_clean %>%
+  group_by(profit, status) %>%
+  summarise(number = n())
+
+```
+
+```{r capital growth map, echo=FALSE, fig.align="centre", message=FALSE, warning=FALSE, paged.print=FALSE}
+
+# set spatial data with sf
+
+Inner_Ring_Profits_And_Losses <- inner_ring_profits_clean %>%
+  select(3,6,9:10) %>%
+  st_as_sf(coords = c("lon", "lat"), crs = 4326)
+  
+View(Inner_Ring_Profits_And_Losses)
+
+mapview(Inner_Ring_Profits_And_Losses, 
+        zcol = "profit",
+        legend = TRUE , # add a legend
+        layer.name = "Profit & Loss") # label the legend)
+
+
+
+```
+
+&nbsp;
+
+### The Best Performing Units
+
+One last look at the Inner Brisbane unit property market, reveals an interesting insight. The following graph has taken the average annual capital growth achieved per resale in Brisbane's Inner Ring during the six months to September 2018. The results clearly show that overall **townhouses are returning better results than apartments** with the top four places going to townhouses in **Balmoral (7.67%)**, **New Farm (6.1%)**, **Fairfield (4.9%)** and **Highgate Hill (4.7%)**. The bottom four places have gone to apartments in **Yeronga (-3.2%)**, **Dutton Park (-2.6%)**, **Bowen Hills (-1.6%)** and **Albion (-1.5%)**.
+
+In a positive note, only 10 of the 61 Inner Brisbane suburbs and unit type combinations recorded negative average annual growth on resales. As the market transitions into a more positive climate in the coming years, Place advisory expects these average capital growth rates for units to increase.
+
+```{r overall capital growth bar chart, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE, fig.align="centre", fig.height=15, fig.width=12.5}
+
+
+# select and mutate variables in the data
+
+inner_ring_sales_data_clean2 <- inner_ring_sales_data %>%
+  select(5,9, "Capital.Growth","X6.Month.Period") %>%
+  mutate(Capital.Growth = as.numeric(gsub("[%]", "", Capital.Growth))) %>%
+  mutate(X6.Month.Period = as.ordered(X6.Month.Period))
+           
+# change variable names
+
+names(inner_ring_sales_data_clean2) <- c("suburb", "type", "growth", "period")
+
+# group, summarise and arrange data for the graph
+inner_ring_sales_grouped <- inner_ring_sales_data_clean2 %>%
+  filter(period == "2018 September") %>%
+  group_by(suburb, type) %>%
+  filter(type == "Townhouses" | type == "Apartments") %>%
+  summarise(capital_growth = mean(growth, na.rm = TRUE)) %>%
+  arrange(capital_growth) %>%
+  mutate(category = paste(suburb, type)) 
+
+# remove undesirable rows
+
+inner_ring_sales_grouped <- inner_ring_sales_grouped[-c(62:64),]
+
+
+# Create Bar Chart 
+
+inner_ring_growth_chart <- ggplot(inner_ring_sales_grouped) +
+  geom_bar(aes(x = reorder(category, capital_growth), y = capital_growth, fill = type), stat = "identity", position = "dodge") +
+  coord_flip() + 
+  labs(title = "Townhouses Achieve Higher Rates of Price Growth",
+       x = "Unit and Suburb",
+       y = "Average Rate of Annual Capital Growth",
+       caption = "Prepared by Place Advisory. Source:PriceFinder") +
+  guides(fill=guide_legend(title="Unit Type"))
+
+inner_ring_growth_chart
+
+```
+
+&nbsp;
+
+
+
+
+
+
+
+
+

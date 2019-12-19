@@ -1,0 +1,486 @@
+---
+title: "Rosewood Market Overview Report"
+author: "Place Projects"
+date: "October 31, 2018"
+output: word_document
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(stringr)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r Data Load , include=FALSE}
+sales_data <- read.csv("Ipswich and Surrounds Sales Data.csv", header = TRUE, sep = ",")
+glimpse(sales_data)
+dim(sales_data)
+```
+
+```{r Clean and mutate the dataframe, include=FALSE}
+
+# vector for june - dec period levels
+june_dec_levels <- c("2007 June", "2007 Dec", "2008 June", "2008 Dec", "2009 June", "2009 Dec", "2010 June", "2010 Dec", "2011 June","2011 Dec", "2012 June", "2012 Dec", "2013 June", "2013 Dec", "2014 June", "2014 Dec", "2015 June", "2015 Dec", "2016 June", "2016 Dec", "2017 June", "2017 Dec", "2018 June")
+
+sales_data2 <- sales_data %>%
+  mutate(Entry.Identifier = as.character(Entry.Identifier)) %>%
+  mutate(Street.Display = as.character(Street.Display)) %>%
+  mutate(Locality = as.factor(Locality)) %>%
+  mutate(Purchaser.Address = as.character(Purchaser.Address)) %>%
+  mutate(Days.To.Sell = as.integer(Days.To.Sell)) %>%
+  mutate(Sale.Price = gsub("[$]", "", Sale.Price)) %>%
+  mutate(Sale.Date = as.Date(Sale.Date, format = "%d/%m/%Y")) %>%
+  mutate(Bedrooms = as.factor(Bedrooms)) %>%
+  filter(year > 2006 & june.dec != "2018 Dec") %>%
+  mutate(Sale.Price = gsub("[,]", "", Sale.Price)) %>%
+  mutate(Sale.Price = as.integer(Sale.Price)) %>%
+  mutate(june.dec = as.ordered(june.dec)) %>%
+  mutate(march.sep = as.ordered(march.sep)) %>%
+  select(1:2, 6:7, 12:15, 17,20:21,23:27) 
+
+levels(sales_data2$june.dec) <- june_dec_levels
+sales_data2 <- filter(sales_data2, june.dec > "2007 Dec")
+
+dim(sales_data2) # 17383 observations and 15 variables  
+
+```
+
+## Rosewood 
+
+Rosewood is found 20 min drive to the west of Ipswich and 50 min west of the Brisbane CBD. As such residents here are able to rely on both cities as a place of employment and amenity as well as the nearby RAAF base that provides employment for many local residents. However, over the next two decades, Rosewood will emerge as its own major hub due to being earmarked for significant growth making Rosewood a prime location to live, work and invest in property. Based on population predictions by the Australian Bureau of Statistics, approximately 658 dwellings will need to be constructed each year on average to keep up with estimated demand.
+
+
+```{r Rosewood Map, echo=FALSE, fig.align='center', fig.height=10, fig.width=20}
+library(jpeg)
+
+rosewood_map <- readJPEG("Rosewood Map Photoshop.jpg")
+
+
+plot(1:2, type='n', xlab="", ylab="", axes=FALSE) 
+rasterImage(rosewood_map,1,1,2,2) 
+  
+
+```
+
+## Amenities
+
+Whilst, Rosewood might currently be small in size compared to nearby Ipswich, it is well serviced by a variety of local amenity. The suburb already boasts everything local residents require with multiple schools for children of all ages, multiple locations for entertainment and leisure, its own train line with a direct service to Ipswich, various medical institutions, places of worship, restaurants and local shopping. This only expected to expand over the coming years as population and development take place.
+
+```{r echo=FALSE, fig.align='center', fig.height=4, fig.width=5}
+
+library(knitr)
+library(flextable)
+
+Care <- c("Veterinary", "General Practice", "Aged Care Facility","", "") 
+Entertainment <- c("Showgrounds", "Golf Course", "Community Centre", "Aquatic Centre", "Parks")
+Education <- c("Early Education School", "Primary School", "High School", "", "") 
+Other <- c("Train Station", "Church", "Shops", "Restaurants", "")
+
+xx <- cbind(Care, Entertainment, Education, Other)
+
+df <- as.data.frame(xx)
+
+head(df)
+
+
+```
+
+## Population
+
+Until now The Australian Bureau of Statistics has recorded population growth in Rosewood at a steady pace with modest growth occurring in recent years. However, the suburb is now expected to more than quadruple in population by 2036 as a result of significant development that is expected to take place over this time making the suburb a prime location in its region to live, work and play. This significant amount of population growth is far more than the Ipswich area and Brisbane LGA is expecting over the same time.
+
+At this expected rate of population growth, Rosewood will require a substantial amount of new dwellings to be constructed in the suburb in order to keep up with impending demand. With a current average number of 3.8 people per household, this will require approximately `r round(50000/20/3.8)` dwellings to be built each year for the next 20 years. This equates to approximately `r paste(round((50000/20/3.8)/999*100), "%", sep="")` of the existing occupied dwellings in the area.
+ 
+
+```{r Estimated Populations, include=FALSE}
+
+past_population <- read.csv("Rose Wood Population.csv", header = TRUE)
+past_population <- select(past_population, 2:3)
+names(past_population) <- c("Population", "Year Ending")
+
+library(stringr)
+
+  
+past_population1 <- past_population %>%
+  mutate(Population1 = gsub("[,]", "", Population)) %>%
+  mutate(Population2 = as.integer(Population1)) %>%
+  mutate(`Year Ending` = as.ordered(`Year Ending`)) %>%
+  select(2,4) %>%
+  mutate(Year_Ending = sub('.', '', `Year Ending`)) %>%
+  select(2:3) %>%
+  select(2, everything())
+  
+
+past_population2 <- past_population1 %>%
+  mutate(Year = str_sub(Year_Ending, start= -4)) %>%
+  mutate(Population = Population2) %>%
+  select(3,4)
+
+
+future_population <- read.csv("Estimated Population.csv", header = TRUE, sep = ",")
+names(future_population) = c("Region", "Locality", "2011", "2016", "2021", "2026", "2031", "2036")
+
+future_population1 <- gather(future_population, Year, Population, 3:8) %>%
+  filter(Year != 2011 & Year != 2016) %>%
+  filter(Locality == "Rosewood") %>%
+  mutate(Population = gsub("[,]", "", Population)) %>%
+  select(3:4)
+
+
+population <- rbind(past_population2, future_population1) 
+population$Population <- as.integer(population$Population)
+
+library(gghighlight)
+
+pop_plot <- ggplot(population, mapping = aes(x = Year, y = Population, group = 1)) + 
+  geom_line(lwd = 1.5, lty = 6, color = "blue") +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  scale_y_continuous(breaks = c(0, 10000, 20000, 30000, 40000, 50000, 60000)) +
+  annotate("text", x = 10, y = 40000, label = "Population is expected to increase") +
+  annotate("text", x = 10, y = 35000, label = "exponentially from 2020") + 
+  annotate("text", x = 10, y = 60000, label = "409% more people in 2036 than in 2016") +
+  theme_bw() +
+  labs(title = "Population Growth in Rosewood", 
+       y = "Estimated Population",
+       caption = "Australian Bureau of Statistics Population Estimates") +
+geom_point(aes(size = 3)) +
+theme(legend.position="none")
+  
+  
+```
+
+```{r Comparable population, echo=FALSE, fig.align="centre", fig.height= 10, fig.width=10, message=FALSE, warning=FALSE}
+
+Year <- c("2021", "2026", "2031", "2036")
+Ipswich <- c(21,56,99,142)
+Rosewood <- c(31,110,213,409)
+Brisbane <- c(21,35,51,67)
+
+df2 <- as.data.frame(cbind(Year, Ipswich, Rosewood, Brisbane))
+
+df2 <- gather(df2, city, tpg, 2:4)
+df2$tpg <- as.integer(df2$tpg)
+df2$city <- as.factor(df2$city)
+df2$Year <- as.factor(df2$Year)
+
+
+comparative_plot <- ggplot(df2, aes(x = city, y = tpg, fill = Year)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Rosewood is Expected to Grow Faster Than Neighboiuring Cities",
+       y = "Total Population Growth (%)",
+       x = NULL,
+       caption = "Comparative population growth compared to 2016 levels. Source: ABS") +
+  theme_bw() +
+  scale_y_continuous(limits = c(0,450)) +
+    annotate("text", x = 1, y = 100, label = "67% Population Growth by 2036") +
+  annotate("text", x = 2, y = 175, label = "142% Population Growth by 2036") +
+  annotate("text", x = 3, y = 450, label = "409% Population Growth by 2036") 
+
+library(gridExtra)
+
+grid.arrange(pop_plot, comparative_plot, ncol = 1)
+
+```
+
+## Infrastructure
+
+```{r include=FALSE}
+developments <- read.csv("Rosewood Developments.csv", sep = ",", header = TRUE)
+
+library(scales)
+
+developments <- developments %>%
+  select(2:4,8) %>%
+  mutate(Description = as.character(Description)) %>%
+  mutate(Value = gsub("[$]", "", Value))
+
+developments <- developments %>%
+  mutate(Value = gsub("[,]", "", Value)) %>%
+  mutate(Value = as.integer(Value))
+```
+
+Rosewood currently has `r dollar(sum(developments$Value))` worth of development currently planned to go ahead excluding development already completed or deferred. This includes a shopping centre extension and library as well as land subdivisions and townhouses to be built in the area. At present there are 15 townhouses planned to be built and 352 land subdivisions. 
+
+```{r Developments, echo=FALSE, fig.align="centre", fig.height=3, fig.width=5.5, message=FALSE, warning=FALSE}
+
+Value <- 246
+Subdivisions <- 352
+Townhouses <- 15
+
+dev_data <- as.data.frame(cbind(Value, Subdivisions, Townhouses))
+dev_data <- gather(dev_data, Type, number, 1:3)
+
+dev_data$Type <- factor(dev_data$Type, levels =  c("Townhouses", "Subdivisions", "Value"))
+
+ggplot(dev_data) +
+  geom_bar(aes(Type, number, fill = Type), stat = "identity") +
+  labs(title = "Developments in Rosewood",
+       y = "Number",
+       x = NULL,
+       caption = "Source: Cordell and BCI") +
+  scale_y_continuous(sec.axis = sec_axis(~.*1, name = "Value of Development ($10,000s)")) +
+  theme(legend.position = "none") +
+  annotate("text", x = 1, y = 50, label = "15 Townhouses") +
+  annotate("text", x = 2, y = 200, label = "352 Subdivisions") +
+  annotate("text", x = 3, y = 300, label = "$24,565,000 Value") 
+  
+
+```
+
+## Demographic Information
+
+#### Affordability and Household Income
+The Australian Bureau of Statistics has recorded the median household income for the area at $57,720 in 2016 up from $53,404 in 2011. At the same time, the average yearly mortgage repayment has decreased from $17,400 in 2011 to now only sit at $16,800 in 2016. This has resulted in property affordability in the area being higher in 2016 as opposed to 2011. This will no doubt create future demand for property in the area, that can sustain price growth in future years. This is backed by the strong economy of the area with 89% of residents in the workforce currently employed.
+
+#### Suburb Makeup
+The median age of residents in the area is now recorded at 39 years. This is partly due to the many family households in the area that account for 72% of all households. Add to this that 92% of dwellings are houses and the family atmosphere of Rosewood takes a strong hold. 
+
+
+```{r Demographics, echo=FALSE, fig.height = 8, fig.width = 8.5, message=FALSE, warning=FALSE}
+demographics <- read.csv("demographics.csv", header = TRUE, sep = ",")
+
+year2 <- c(2011,2016)
+household_income <- c(53404, 57720)
+average_mortgage <- c(17400, 16800)
+net_income <- household_income - average_mortgage
+median_age <- 39
+total_employed <- 89
+family_households <- 72
+proportion_houses <- 92
+
+df3 <- as.data.frame(cbind(year2, household_income, average_mortgage, net_income))
+df3 = gather(df3, type, value, 2:4)
+
+affordability <- ggplot(df3, aes(x = year2, y = value, fill = type )) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_bw() +
+  labs (title = "Higher Income and Lower Mortgage Payments in 2016 Compared to 2011",
+        y = "Value ($)", 
+        caption = "Household income, mortgage payments and net income in Rosewood. Source: ABS" ) +
+  scale_x_discrete(name = "Year", limits = c(2011,2016)) + 
+  scale_fill_discrete(name=NULL,
+  labels = c("Yearly Mortgage Repayment", "Yearly Household Income", "Difference")) +
+  annotate("text", x = 2011, y = 56000, label = "Net Income After Mortgage is $36,004") +
+  annotate("text", x = 2016, y = 60000, label = "Net Income After Mortgage is $40,920")
+
+
+df4 <- as.data.frame(cbind(median_age, total_employed, family_households, proportion_houses))
+df4 <- gather(df4, category, value, 1:4)
+
+library(ggrepel)
+
+rosewood_stats <- ggplot(df4, aes(x = category, y = value, size = 6)) +
+  geom_point(colour = c("dodgerblue4", "skyblue3", "lightsteelblue4", "cadetblue4")) +
+  theme_bw() +
+  scale_y_continuous(limits = c(0,100)) +
+  labs(title = "Rosewood Statistics",
+  x = NULL,
+  y = "Percentage (%)/ Age (years)",
+  caption = "Source ABS") +
+  theme(legend.position = "none") +
+  scale_x_discrete(labels = c("Family Households", "Median Age", "Proportion Houses", "Residents Employed")) +
+  geom_label_repel(aes(label = c("39 Years", "89%", "72%", "92%")),
+                  box.padding   = 0.35, 
+                  point.padding = 0.5,
+                  segment.color = 'grey50')
+
+grid.arrange(affordability, rosewood_stats, ncol = 1)
+
+```
+
+
+## Market Information
+
+```{r Rosewood Summary Data, include=FALSE}
+
+sales_rosewood <- sales_data2 %>%
+  filter(Locality == "ROSEWOOD") %>%
+  filter(Property.Type == "House") %>%
+  group_by(june.dec) %>%
+  summarise(Sale.Price = median(Sale.Price), Sales = n())
+
+```
+
+#### Median Prices and Sales Volumes
+
+Rosewood house prices have held steady over the past 10 years with recent upward price movement emerging in recent periods. At the end of the June 2018 six month period, house prices returned to their peak at $311,000. This is 6.5% higher than the same period in 2017 and 19.6% higher than five years prior. Sales volumes in Rosewood have also remained fairly steady, despite the wider market slowdown, with 22 sales occuring in the June 2018 six month period. 
+
+Rosewood has stayed on pay with Ipswich house prices over the last 10 years, with Inner Ipswich median house prices being only 2.9% higher at $320,000 at the end of the June 2018 six month period. 
+
+
+```{r Rosewood Volumes and Median Price, echo=FALSE}
+
+library(pipeR)
+
+rosewood_graph <- sales_rosewood %>>% ggplot() + 
+  geom_bar(mapping = aes(x = june.dec, y = Sales), stat = "identity", fill = "royalblue4") + 
+  geom_line(mapping = aes(x = june.dec, y = Sale.Price/10000, group = 1), colour = "turquoise4", lwd = 1.5) + 
+  scale_y_continuous(sec.axis = sec_axis(~ . * 10000, labels = scales::comma, name = "Median Price"), 
+    limits = c(0, 50)) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  labs(title = "Rosewood House Sales Remain Steady",
+       x = "Six Month Period", 
+       y = "Number of Sales",
+       caption = "Number of house sales and median price by over time in Rosewood. Source: PriceFinder") +
+  annotate("text", x = 20.5, y = 35, label = "$311,000")
+  
+```
+
+
+```{r Ipswich Sales Volumes and House Price, echo=FALSE, fig.height = 10, fig.width = 10, message=FALSE, warning=FALSE}
+
+Ipswich_Area <- sales_data2 %>%
+  filter(Region == "Ipswich Area") %>%
+  filter(Property.Type == "House") %>%
+  group_by(june.dec) %>%
+  summarise(Sale.Price = median(Sale.Price), Sales = n())
+
+ipswich_graph <- Ipswich_Area %>>% ggplot() + 
+  geom_bar(mapping = aes(x = june.dec, y = Sales), stat = "identity", fill = "royalblue4") +
+  geom_line(mapping = aes(x = june.dec, y = Sale.Price/500, group = 1), colour = "turquoise4", lwd = 1.5) + 
+  scale_y_continuous(sec.axis = sec_axis(~ . * 500, labels = scales::comma, name = "Median Price"), 
+    limits = c(0, 1000)) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  labs(title = "House Sales in the Ipswich Area Remain Steady",
+       x = "Six Month Period", 
+       y = "Number of Sales",
+       caption = "Number of house sales and median price by over time in the Ipswich Area. Source: PriceFinder") +
+  annotate("text", x = 20.5, y = 850, label = "$320,000")
+
+grid.arrange(rosewood_graph, ipswich_graph, ncol = 1)
+```
+
+#### New Houses vs Resold Houses - Page 4
+
+New houses in Rosewood, as expected, have generally come at a premium price. However, scarcity of new homes in the area is scurrently being seen with a declining rate of new house sales in recent years, whereas house resales increased in number. 
+
+This scarcity has also resulted in a higher prices for new houses as demand is outweighs supply in the suburb. Whilst, resold homes have generally held steady in price, it is these new houses that are seeing exceptional price growth at present. Compared to one year prior, new houses are now 20.4% higher. However, with resold houses now achieving a price of $310,000 the gap between new and old houses in the area has contracted offering a perfect opportunity to capture strong potential for future capital growth.
+
+```{r New vs Resold, echo=FALSE, fig.align="centre", fig.height=5, fig.width=9.5}
+
+Rosewood <- sales_data2 %>%
+  filter(Locality == "ROSEWOOD") %>%
+  filter(Property.Type == "House") %>%
+  group_by(june.dec, Status) %>%
+  summarise(number = n(), price = median(Sale.Price))
+
+Rosewood %>>% ggplot() + 
+  geom_bar(mapping = aes(x = june.dec, y = number, fill = Status), stat = "identity", position = "dodge") + 
+  geom_line(mapping = aes(x = june.dec, y = price/15000, group = Status, color = Status), lwd = 1.5) + 
+  scale_y_continuous(sec.axis = sec_axis(~ . * 15000, labels = scales::comma, name = "Median Price"), 
+    limits = c(0, 30)) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  labs(title = "Rosewood Houses: New vs. Resold Houses",
+       x = "Six Month Period", 
+       y = "Number of Sales",
+       caption = "Number of house sales and median price over time and by new and old in Rosewood. Source: PriceFinder") +
+  annotate("text", x = 20.5, y = 22, label = "$325,000") +
+  annotate("text", x = 20.5, y = 18, label = "$310,000")
+
+
+```
+
+
+
+```{r Buyer Location Graphs, eval=FALSE, fig.align="centre", fig.height=8, fig.width=12, message=FALSE, warning=FALSE, include=FALSE}
+
+Rosewood_Buyers <- sales_data2 %>%
+  filter(Locality == "ROSEWOOD") %>%
+  filter(Property.Type == "House") %>%
+                   mutate(Buyer_State = ifelse(str_detect(Purchaser.Address, "QLD"), "QLD",
+                       ifelse(str_detect(Purchaser.Address, "NSW"), "NSW",
+                       ifelse(str_detect(Purchaser.Address, "NT"), "NT",
+                       ifelse(str_detect(Purchaser.Address, "VIC"), "VIC", 
+                       ifelse(str_detect(Purchaser.Address, "SA"), "SA", 
+                       ifelse(str_detect(Purchaser.Address, "WA"), "WA", 
+                       ifelse(str_detect(Purchaser.Address, "TAS"), "TAS",
+                       ifelse(str_detect(Purchaser.Address, "ACT"), "ACT", "OTHER")))))))))
+  
+
+QLD_Postcodes <- read.csv("QLD Postcodes and Localities.csv", header = TRUE, sep = ",")
+QLD_Postcodes <- mutate(QLD_Postcodes, Buyer_Postcode = Postcode) %>%
+  select(2:3)
+  
+Rosewood_Buyers <- Rosewood_Buyers %>%
+  mutate(Buyer_Postcode = substr(sapply(strsplit(Purchaser.Address, "QLD, ", fixed = FALSE), "[",2), 1, 4)) %>%
+  filter(Locality == "ROSEWOOD")
+
+  
+Rosewood_Buyers$Buyer_Postcode <- as.character(Rosewood_Buyers$Buyer_Postcode)
+QLD_Postcodes$Buyer_Postcode <- as.character(QLD_Postcodes$Buyer_Postcode)
+
+
+Rosewood_Buyers <- left_join(x = Rosewood_Buyers, y = QLD_Postcodes, by = c("Buyer_Postcode", "Buyer_Postcode"))
+
+Rosewood_Buyers2 <- Rosewood_Buyers %>%
+  filter(Buyer_State == "QLD") %>%
+  mutate(LGA.Council = ifelse(LGA.Council == "BRISBANE CITY", "BRISBANE CITY", 
+                       ifelse(LGA.Council == "IPSWICH CITY", "IPSWICH CITY", 
+                       ifelse(LGA.Council == "LOGAN CITY", "LOGAN CITY",
+                       ifelse(LGA.Council == "Rosewood Area", "ROSEWOOD AREA", "OTHER"))))) 
+  
+Buyer_State_Graph2 <- ggplot(Rosewood_Buyers2) +
+  geom_bar(mapping = aes(x = june.dec, fill = LGA.Council)) +
+theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  labs(title = "Most Buyers of Rosewood Houses are From the Area",
+       y = "Number of Sales", 
+       x = "Six Month Period", 
+       caption = "Rosewood house sales over time by QLD buyer location")
+
+Buyer_State_Graph2
+```
+
+## Rental 
+
+Rosewood is currently experiencing upward pressure on rental properties in the suburb. Four bedroom houses have now reached an all time high at a median asking price of $400 per week. This comes on the back of a consistently strong vacancy rate which sits at 2.8% with only 18 properties in total available for rent at the end of September 2018. 
+
+This low level of available properties will ensure that rental prices and vacancy rates are sustainable with only a small number of newly let properties needed to have strong downward pressure on the vacancy rate. As four bedroom homes become more scarcely available for rent, three bedroom homes are similarly expected to experience upward pressure on rental prices. Both these property types are highly sought after in the area due to the large number of families that reside there.
+
+```{r Rental Prices, echo=FALSE, fig.align = "center", fig.height=5, fig.width=9.5, message=FALSE, warning=FALSE}
+
+rental_price <- read.csv("Rosewood postcode house rental prices.csv", sep = ",", header = TRUE)
+
+names(rental_price) <- c("Quarterly_Period", "Three_Bed", "Four_Bed")
+
+rental_price <- rental_price %>%
+  mutate(Three_Bed = as.integer(Three_Bed)) %>%
+  mutate(Four_Bed = as.integer(Four_Bed)) %>%
+  mutate(Quaterly_Period = as.ordered(Quarterly_Period)) %>%
+  select(2:4)
+
+levels(rental_price$Quaterly_Period) <- c("Dec-12", "Mar-13", "Jun-13", "Sep-13", "Dec-13", "Mar-14", "Jun-14", "Sep-14", "Dec-14", "Mar-15", "Jun-15", "Sep-15", "Dec-15", "Mar-16", "Jun-16", "Sep-16", "Dec-16", "Mar-17", "Jun-17", "Sep-17", "Dec-17", "Mar-18", "Jun-18", "Sep-18")
+
+rental_price_clean <- gather(rental_price, No_Beds, Price, 1:2)
+
+ggplot(rental_price_clean, mapping = aes(Quaterly_Period, Price, group = No_Beds)) +
+  geom_line(aes( colour = No_Beds), size = 1.5) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  labs(title = "Four Bedroom Houses See Rental Increase",
+       y = "Weekly Rental Price",
+       x = "Quarterly Period",
+       caption = "Weekly rental price for Rosewood houses by number of bedrooms. Source: REIQ")
+  
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

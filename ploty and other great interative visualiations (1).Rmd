@@ -1,0 +1,192 @@
+---
+title: "zilani-week5"
+author: "zilani"
+date: "4 October 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+### Import the data file
+
+```{r}
+# Read CSV, note the delimiter (sep)
+# remark the seperated signal
+# if no head define than it is thinking the header is true
+
+```
+
+```{r}
+#Read CSV, note the delimiter (sep)
+df <- read.csv("ploty and other great interative visualiations (1).csv", sep=';')
+head(df)
+
+```
+
+
+```{r}
+# check the summary of the data file
+summary(df)
+```
+
+## Exploratory data analysis
+
+```{r}
+# checking if there any null values
+any(is.na(df))
+```
+
+```{r}
+
+# checking the catagorical feature
+# structure of the data file
+str(df)
+```
+
+```{r}
+# install the library ggtheme is for showing the various theme in your projects.
+
+library(ggplot2)
+library(ggthemes)
+library(dplyr)
+library(corrgram)
+library(corrplot)
+```
+
+####Correlation (wikipedia)
+**In statistics, dependence or association is any statistical relationship, whether causal or not, between two random variables or two sets of data. Correlation is any of a broad class of statistical relationships involving dependence, though in common usage it most often refers to the extent to which two variables have a linear relationship with each other. Familiar examples of dependent phenomena include the correlation between the physical statures of parents and their offspring, and the correlation between the demand for a product and its price.**
+
+
+```{r}
+# Correlation plots are a great way of exploring data and seeing if there are any interaction terms. Let's start off by just grabbing the numeric data (we can't see correlation for categorical data):
+
+# Grab only numeric columns
+(num.cols <- sapply(df, is.numeric))
+
+# Filter to numeric columns for correlation
+(cor.data <- cor(df[,num.cols]))
+
+cor.data
+```
+
+
+**While working with data this is a best practice to see the correlation within the variables either in matrix format or in the graphical format**
+
+```{r}
+# visualization the correlation in a dataframe, within the numerical variables
+
+corrplot(cor.data,method='color')
+```
+
+
+# Interective visualization
+
+
+**plot.ly**
+  - **web page**
+  - **getting started**
+  
+```{r}
+library(plotly)
+```
+
+
+**Examples of using the plotly with a normal ggplot2**
+
+```{r}
+
+# normal ggplot2 function in mtcar data set
+library(ggplot2)
+pl<-ggplot(mtcars,aes(mpg,wt))+geom_point()
+print(pl)
+```
+
+
+```{r}
+# using plotly in the mtcars data set 
+# color wise display
+
+library(plotly)
+
+q<-qplot(x=mpg, y=wt, data=mtcars, color=disp)
+gpl<-ggplotly(q)
+print(gpl)
+
+```
+
+
+```{r}
+# adding the size in the above data set
+# based on the hp
+library(plotly)
+tempdata<-mtcars
+q<-qplot(x=mpg, y=wt,z=cyl, data=mtcars, color=disp, size=hp)
+gpl<-ggplotly(q)
+print(gpl)
+
+
+```
+
+
+```{r}
+
+# 3d display using the plotly
+# different color is different cylender
+# x and y axis is same as before
+
+plot_ly(mtcars, x=~mpg,y=~wt,z=~qsec,type="scatter3d",mode="makers",color=~cyl)
+```
+
+
+
+
+https://plot.ly/ggplot2/
+
+
+```{r echo=FALSE}
+library(plotly)
+
+df1 <- data.frame(cond = factor( rep(c("A","B"), each=200) ),
+                  rating = c(rnorm(200),rnorm(200, mean=.8)))
+
+df2 <- data.frame(x=c(.5,1),cond=factor(c("A","B")))
+
+p <- ggplot(data=df1, aes(x=rating, fill=cond)) +
+    geom_vline(xintercept=c(.5,1)) +
+    geom_histogram(binwidth=.5, position="dodge")
+
+# ploting without using plotly
+plot(p)
+
+
+# using the plotly the bar chart
+p <- ggplotly(p)
+
+plot_ly(p)
+
+
+```
+
+
+```{r}
+# animation in plotly
+#install.packages('gapminder')
+library(plotly)
+library(gapminder)
+head(gapminder)
+datagapminder<-gapminder
+p <- ggplot(gapminder, aes(gdpPercap, lifeExp, color = continent)) +
+  geom_point(aes(size = pop, frame = year, ids = country)) +
+  scale_x_log10()
+
+p <- ggplotly(p)
+
+print(p)
+```
+

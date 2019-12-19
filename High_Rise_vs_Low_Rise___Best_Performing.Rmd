@@ -1,0 +1,428 @@
+---
+title: "High Rise vs Low Rise"
+author: "Place Advisory"
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Load Libraries, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+library(readr)
+library(dplyr)
+library(geosphere)
+library(ggplot2)
+library(ggmap)
+library(leaflet)
+library(plotly)
+library(xts)
+library(dygraphs)
+library(gridExtra)
+library(scales)
+
+```
+
+```{r Load Data, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+# Load sales data
+sales_data <- read_csv("R:/Projects/Market Analysis and Database Records/Sales Data/Sales Data CSV Files/All_Sales_Data.csv")
+
+# Load Building List
+building_list <- read_csv("R:/Projects/Jay/Jay Portfolio/SQL Projects/Sales Data Database/Buildings.csv")
+
+# Load Resales Data
+resales <- read_csv("R:/Projects/Jay/Jay Portfolio/SQL Projects/Sales Data Database/Resales.csv")
+
+# Clean resales
+resales_cleaned <- resales %>%
+  mutate(Resale = as.factor(Resale))
+
+```
+
+```{r Clean and Mutate Dataframes, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+#change classes of sales data variables drop unwanted variables and filter to last 10 years
+sales_data_cleaned <- sales_data %>%
+  mutate(Suburb = as.factor(Suburb)) %>%
+  mutate(Postcode = as.factor(Postcode)) %>%
+  mutate(Property_Type = as.factor(Property_Type)) %>%
+  mutate(Sale_Date = as.Date(Sale_Date, format = "%m/%d/%Y")) %>%
+  mutate(No_Beds = as.factor(No_Beds)) %>%
+  mutate(No_Baths = as.factor(No_Baths)) %>%
+  mutate(No_Carparks = as.factor(No_Carparks)) %>%
+  mutate(Six_Month_Period_Mar_Sep = as.ordered(Six_Month_Period_Mar_Sep)) %>%
+  mutate(Region = as.factor(Region)) %>%
+  mutate(Waterfront = as.factor(Waterfront)) %>%
+  select(1:2, 7:11, 16:24) %>%
+  filter(Property_Type == "Apartments" | Property_Type == "Townhouses") 
+
+
+# change classes of building data variables and drop unwanted variables
+
+buildings_cleaned <- building_list %>%
+  mutate(Building_Type = as.factor(Building_Type)) %>%
+  mutate(Suburb = as.factor(Suburb)) %>%
+  mutate(`Waterfront/nWaterfront` = as.factor(`Waterfront/nWaterfront`)) %>%
+  mutate(Scale = as.factor(Scale)) %>%
+  select(1:2, 8:10)
+  
+
+```
+
+```{r Select only properties within 5km of Brisbane CBD, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+# merge coordinates to sales data
+
+sales_data_merge <- left_join(sales_data_cleaned, buildings_cleaned, by = c("Building_Lot_Number" = "Plan_Number"))
+
+sales_data_merge <- sales_data_merge %>% rowwise() %>%
+    mutate(Distance = round(distHaversine(c(Longitude, Latitude), c(153.025124, -27.469771))/1000,3)) # static Brisbane coordinates for formula
+  
+### drop any buildings outside 5km
+sales_data_merge <- sales_data_merge %>%
+  filter(Distance <= 5)
+  
+
+```
+
+```{r Make 1:5km ring Polygons, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+data = data.frame(
+  ID = as.numeric(c(1)), # number of points and there coordinates below
+  longitude = as.numeric(c(153.025124)),
+  latitude = as.numeric(c(-27.469771))
+  )
+
+# create circles data frame from the centers data frame
+make_circles <- function(centers, radius, nPoints = 1000){
+  # centers: the data frame of centers with ID
+  # radius: radius measured in kilometer
+  #
+  meanLat <- mean(centers$latitude)
+  # length per longitude changes with lattitude, so need correction
+  radiusLon <- radius /111 / cos(meanLat/57.3) 
+  radiusLat <- radius / 111
+  circleDF <- data.frame(ID = rep(centers$ID, each = nPoints))
+  angle <- seq(0,2*pi,length.out = nPoints)
+  
+  circleDF$lon <- unlist(lapply(centers$longitude, function(x) x + radiusLon * cos(angle)))
+  circleDF$lat <- unlist(lapply(centers$latitude, function(x) x + radiusLat * sin(angle)))
+  return(circleDF)
+}
+
+# here is the data frame for all circles
+myCircles1 <- make_circles(data, 1) # 1km
+myCircles2 <- make_circles(data, 2) # 2km
+myCircles3 <- make_circles(data, 3) # 3km
+myCircles4 <- make_circles(data, 4) # 4km
+myCircles5 <- make_circles(data, 5) # 5km
+
+```
+
+As the current residential construction boom comes to the end of a cycle, Inner Brisbane has undoubtedly seen a transformation with many new buildings being added to the market. The following interactive report has broken down each segment of the Inner Brisbane market to provide a more detailed analysis of the relevant properties.
+
+*For the purposes of this report, the following categorical breakdown for units is applied. Please click on the different tabs to get an explanation of each category.*
+
+## CATEGORIES {.tabset .tabset-fade .tabset-pills}
+### Small Size Townhouse Complexes 
+
+These complexes contain a maximum of only 10 townhouses and account for the majority of townhouses in Inner Brisbane. These townhouse complexes are found more predominantly between 3km and 5km from Brisbane's centre to the south and east and between 2km and 4km to the north and west parts of Inner Brisbane.
+
+### Medium Size Townhouse Complexes
+
+These complexes contain a minimum of 11 townhouses and a maximum of 40. They account for only a small proportion of all units in Inner Brisbane and are found scattered throughout the region. 
+
+### Low Rise Apartment Buildings
+
+Low-Rise apartment buildings contain a maximum of 10 apartments. These buildings are the most prevalent of any category throughout the Inner Brisbane region and are found at all distances. However, the proportion of low rise apartment buildings decreases closer to the CBD. 
+
+### Mid Rise Apartment Buildings
+
+Mid-Rise apartment buildings contain a minimum of 11 apartments and a maximum of 40. These buildings are predominantly located between 1km and 3km to the CBD's east and between 3km and 4km to the south west.
+
+### High Rise Apartment Buildings
+
+High-Rise apartment buildings saw substantial development during the recent "apartment boom" in Inner Brisbane. These buildings contain at least 41 apartments and are most commonly located between Toowong heading north east across the CBD to Teneriffe. The majority of these buildings are concentrated within a 3km radius of Brisbane's centre.
+
+## INNER BRISBANE UNITS
+
+In the map below, all residential buildings within a 5km radius of Brisbane's centre have been plotted by type and size. Use the icon in the top right corner to filter the map output with your selected property type and radius. Please note that some recently completed buildings may not yet be visible.
+
+&nbsp;  
+
+```{r Leaflet Map of Buildings, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE, fig.align = "centre", fig.width = 8}
+
+# reduce dataframe and write it for manual unique(Building_Name) formatting due to grouping issue in R
+
+#sales_data_merge1 <- sales_data_merge %>%
+ # select(Building_Name, Latitude, Longitude, Property_Type, Scale) %>%
+  #write.csv("Sales_data_merge_for_Grouping.csv")
+
+# After Manual grouping reload the data
+sales_data_merge_2 <- read.csv("R:/Projects/Jay/Jay Portfolio/R Projects/Research Blogs/HighRise vs LowRise and Best Performing Jan 2019/Sales_data_merge_for_Grouping_Unique.csv")
+
+# create filtered dataframes for leaflet map with unique buildings
+
+small_townhouses <- sales_data_merge_2 %>%
+  filter(Property_Type == "Townhouses" & Scale == "Ten units or less") 
+
+medium_townhouses <- sales_data_merge_2 %>%
+  filter(Property_Type == "Townhouses" & Scale == "Mid sized (11 to 40 units)") 
+
+small_apartments <- sales_data_merge_2 %>%
+  filter(Property_Type == "Apartments" & Scale == "Ten units or less") 
+
+medium_apartments <- sales_data_merge_2 %>%
+  filter(Property_Type == "Apartments" & Scale == "Mid sized (11 to 40 units)") 
+
+large_apartments <- sales_data_merge_2 %>%
+  filter(Property_Type == "Apartments" & Scale == "Large scale (41 units or greater)") 
+
+# Create Leafleat Map
+
+Brisbane_Map <- leaflet(options = leafletOptions(dragging = TRUE, minZoom = 12)) %>% 
+  addProviderTiles("Esri") %>% 
+  setMaxBounds(lng1 = 152.970951, lng2 = 153.116971, lat1 = -27.410852, lat2 = -27.532954) %>%
+ addCircleMarkers(data = small_townhouses, lng = ~Longitude, lat = ~Latitude, radius = 1.5, color = "turquoise", fillOpacity = 1, group = "Small Size Townhouse Complexes") %>% 
+   addCircleMarkers(data = medium_townhouses, lng = ~Longitude, lat = ~Latitude, radius = 1.5, color = "steelblue", fillOpacity = 1, group = "Medium SIzed Townhouse Complexes") %>%
+  addCircleMarkers(data = small_apartments, lng = ~Longitude, lat = ~Latitude, radius = 1.5, color = "violet", fillOpacity = 1, group = "Low-Rise Apartment Buildings") %>%
+  addCircleMarkers(data = medium_apartments, lng = ~Longitude, lat = ~Latitude, radius = 1.5, color = "magenta", fillOpacity = 1, group = "Mid-Rise Apartment Buildings") %>%
+  addCircleMarkers(data = large_apartments, lng = ~Longitude, lat = ~Latitude, radius = 1.5, color = "slateblue", fillOpacity = 1, group = "High-Rise Apartment Buildings") %>%
+   addPolygons(data = myCircles1, lng = ~lon, lat = ~lat, color = "black", fillOpacity = 0, group = "1km Ring") %>%
+   addPolygons(data = myCircles2, lng = ~lon, lat = ~lat, color = "black", fillOpacity = 0, group = "2km Ring") %>%
+   addPolygons(data = myCircles3, lng = ~lon, lat = ~lat, color = "black", fillOpacity = 0, group = "3km Ring") %>%
+   addPolygons(data = myCircles4, lng = ~lon, lat = ~lat, color = "black", fillOpacity = 0, group = "4km Ring") %>%
+   addPolygons(data = myCircles5, lng = ~lon, lat = ~lat, color = "black", fillOpacity = 0, group = "5km Ring") %>%
+ addLayersControl(overlayGroups = c("Small Size Townhouse Complexes", "Medium SIzed Townhouse Complexes", "Low-Rise Apartment Buildings", "Mid-Rise Apartment Buildings", "High-Rise Apartment Buildings", "1km Ring", "2km Ring", "3km Ring", "4km Ring", "5km Ring"))
+                  
+Brisbane_Map
+```
+
+To find out what is currently happening in the Inner Brisbane off the plan apartment market, please read our [APARTMENT REPORT](http://www.placeprojects.com.au/quarterly-reports/).
+
+## MEDIAN PRICE BY CATEGORY
+
+The graph below displays median price movements for each unit category over the last 10 years. Interestingly, both townhouse categories have consistently recorded higher median prices than all three apartment categories over the past 10 years. Furthermore, low-rise apartment buildings have recorded considerably lower median prices than the other four categories. This is attributable to the fact that many older apartment buildings are located further from the CBD than their counterparts. In contrast, many newer buildings that have been constructed in recent years are mid and high-rise apartment buildings which have been attracting a premium prices. 
+
+```{r Median Price Graph, echo=FALSE, fig.align="centre", fig.height =7, fig.width = 12, message=FALSE, warning=FALSE, paged.print=FALSE}
+
+# Select and Filter Data from 10 Year Graphs - Apartments
+Ten_Years_Sales_Apartments <- sales_data_merge %>%
+  filter(Six_Month_Period_Mar_Sep > "2008 September" & Six_Month_Period_Mar_Sep < "2019 March", Property_Type == "Apartments") %>%
+  group_by(Six_Month_Period_Mar_Sep, Scale) %>%
+  summarise(Median_Price = median(Sale_Price), No_Sales = n()) %>%
+  mutate(Type = paste("Apartments ", Scale)) # ncreate second type variable 
+
+#### Type will not split properly so the process is repeated for townhouses and then joined back together
+
+# Select and Filter Data from 10 Year Graphs - Townhouses
+Ten_Years_Sales_Townhouses <- sales_data_merge %>%
+  filter(Six_Month_Period_Mar_Sep > "2008 September" & Six_Month_Period_Mar_Sep < "2019 March", Property_Type == "Townhouses") %>%
+  filter(Scale != "Large scale (41 units or greater)") %>%
+  group_by(Six_Month_Period_Mar_Sep, Scale) %>%
+  summarise(Median_Price = median(Sale_Price), No_Sales = n()) %>%
+  mutate(Type = paste("Townhouses ", Scale))
+
+# Join data back together
+Ten_Years_Sales <- rbind(Ten_Years_Sales_Apartments, Ten_Years_Sales_Townhouses) %>%
+  mutate(Type = as.factor(Type)) 
+
+# ungroup and change class
+Ten_Years_Sales <-ungroup(Ten_Years_Sales) %>%
+  mutate(Six_Month_Period_Mar_Sep = as.factor(Six_Month_Period_Mar_Sep))
+
+# drop unwanted factor level for 6 month period
+Ten_Years_Sales <- Ten_Years_Sales %>%
+  mutate(Six_Month_Period_Mar_Sep = droplevels(Ten_Years_Sales$Six_Month_Period_Mar_Sep, exclude = if(anyNA(levels(Ten_Years_Sales$Six_Month_Period_Mar_Sep))) NULL else NA)) 
+
+# geom_line colour vector
+line_colours <- c("slateblue", "magenta", "violet", "steelblue", "turquoise")
+
+legend_names <- c("High-Rise Apartment Buildings", "Mid-Rise Apartment Buildings", "Low-Rise Apartment Buildings", "Medium Size Townhouses Complexes",  "Small Size Townhouse Complexes")
+
+# create ggplot line graph of median prices
+(Property_Type_Scale <- ggplot(Ten_Years_Sales, aes(x = Six_Month_Period_Mar_Sep, y = Median_Price, group = Type, colour = Type)) +
+  geom_line(size = 1.5) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+        legend.title = element_blank(), 
+        legend.position = "right", 
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black")) +
+  labs(title = "Inner City Units Show Early Signs of Price Growth",
+       x = "Six Month Period", 
+       y = " Median Price", 
+       caption = "Median Price by Property Type and Complex Size by Six Month Periods") +
+  scale_y_continuous(labels = dollar_format(prefix = "$")) +
+  scale_colour_manual(labels = legend_names, values = line_colours))
+```
+
+In a sign of the market returning to positive growth, both townhouse categories as well as mid-rise apartment buildings showed median price increases during the past six month period ending September 2018. High-rise apartment building median prices have been relatively flat over the past 18 months. 
+
+At the end of the September 2018 six month period, Medium Sized Townhouse Complexes had the highest median price of $578,750 recording a growth rate of 3.1% per annum over the past 10 years. This is followed by Small Size Townhouse complexes which recorded a median price of $546,000 for the same period at a growth rate of 2% per annum over the past 10 years. High Rise, Mid Rise and Low Rise Apartment Buildings recorded median prices of $500,000, $475,250 and $395,000 during the September 2018 six month period at growth rates of 1.3%, 1.7% and 1.2% per annum over the past 10 years respectively.
+
+```{r Median Price Animation Graph, eval=FALSE, fig.align="centre", fig.height=7, fig.length=12, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+Property_Type_Scale2 <- ggplot(Ten_Years_Sales, aes(x = Six_Month_Period_Mar_Sep, y = Median_Price, 
+                                                    group = Type, colour = Type, frame = Six_Month_Period_Mar_Sep)) +
+  geom_point(size = 4) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+        legend.title = element_blank(), 
+        legend.position = "none",
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black")) +
+  labs(title = "Inner City Unit Median Price Movements",
+       x = NULL, 
+       y = " Median Price", 
+       caption = "Median Price by Property Type and Complex Size by Six Month Periods") +
+  scale_y_continuous(labels = dollar_format(prefix = "$")) +
+   scale_colour_manual(labels = legend_names, values = line_colours)
+
+ggplotly(Property_Type_Scale2, tooltip = "Median_Price", width = 2) 
+
+```
+
+## SALES VOLUMES BY CATEGORY
+
+The following chart displays the number of sales by category as a proportion of total sales per six month period. The Inner Brisbane unit market peaked in sales volumes during the height of the apartment boom in 2015. However, there were only material increases in sales volumes proportions in high-rise apartment buildings and to a lesser extent, mid-rise apartment buildings. Following initial steep declines in sales numbers beginning in 2016, the proportional drop in sales from period to period is now minimal with sales volumes sitting at levels seen just prior to the apartment boom and signifying a stabilising market.
+
+```{r Number of Sales Bar Chart, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE, fig.align = "centre", fig.width = 10, height = 6}
+
+ggplot(data = Ten_Years_Sales, aes(x = Six_Month_Period_Mar_Sep, y = No_Sales, group = Type, fill = Type)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(labels = legend_names, values = line_colours) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black"),
+        legend.position = "right",
+        legend.title = element_blank()) +
+  labs(title = "The Largest Reduction in Sales Volumes Has Been in Large Scale Apartment Buildings",
+       x = "Six Month Period",
+       y = "Number of Sales",
+       caption = "Number of Sales by Property Type and Complex Size by Six Month Periods") +
+  scale_y_continuous(labels=function(x) format(x, big.mark = ",", scientific = FALSE)) 
+   
+
+```
+
+During the last six month period ending September 2018, high-rise apartments recorded the most sales with 1,065, followed by mid-rise apartment buildings with 328 and low-rise apartments with 311. Small size townhouse complexes recorded 141 sales with a further 48 townhouse sales in medium sized townhouse complexes.
+
+From their respective peaks, high-rise apartment sales volumes have fallen -68.9%, mid-rise apartments have fallen by 56.1% and low-rise apartments by -45.1%. Small size townhouse complexe's sales volumes similarly declined by -44.8%, whilst townhouse sales in medium sized complexes declined by -28.4%. 
+
+## CAPITAL GROWTH
+
+Place Advisory has also analysed the annual capital growth rates achieved on all resales from the past **12 months** ending September 2018. These are plotted on the map of Brisbane below, giving you a better visual of what is happening in the Inner Brisbane unit market. 
+
+*This map is interactive, scroll around and use the filter tab in the top right corner.*
+```{r Leaflet of Capital Growth, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE, fig.align = "centre"}
+
+# create 1 year of sales data
+One_Years_Sales_Data <- sales_data_merge %>%
+  filter(Six_Month_Period_Mar_Sep > "2017 September" & Six_Month_Period_Mar_Sep < "2019 March") %>%
+  mutate(Type = paste(Property_Type, " ",  Scale)) 
+
+# merge ressale data
+resale_merge <- left_join(One_Years_Sales_Data, resales_cleaned, by = c("Entry_ID" = "Entry_ID"))
+
+# remove new rows and those with no capital growth recorded becuase of a holding period below 1 year
+resale_merge <- resale_merge %>%
+  filter(!is.na(`Holding Period`)) %>%
+  filter(!is.na(`Annual Capital Growth`)) %>%
+  filter(Type != "Townhouses Large scale (41 units or greater)")
+
+# break sales data into 6 bins
+
+# less than 0%
+
+under_zero <- resale_merge %>%
+  filter(`Annual Capital Growth` < 0)
+
+zero_twohalf <- resale_merge %>%
+  filter(`Annual Capital Growth` > 0 & `Annual Capital Growth` <= 0.025)
+
+twohalf_five <- resale_merge %>%
+  filter(`Annual Capital Growth` > 0.025 & `Annual Capital Growth` <= 0.05)
+
+five_sevenhalf <- resale_merge %>%
+  filter(`Annual Capital Growth` > 0.05 & `Annual Capital Growth` <= 0.075)
+
+sevenhalf_plus <- resale_merge %>%
+  filter(`Annual Capital Growth` > 0.075) 
+
+# Create leaflet map
+
+Brisbane_Map2 <- leaflet(options = leafletOptions(dragging = TRUE, minZoom = 12)) %>%
+  setMaxBounds(lng1 = 152.970951, lng2 = 153.116971, lat1 = -27.410852, lat2 = -27.532954) %>%
+  addProviderTiles("Esri") %>% 
+  addCircleMarkers(data = under_zero, lng = ~Longitude, lat = ~Latitude, radius = 1.5, color = "darkred", fillOpacity = 0.5, group = "Less than 0% Per Annum") %>% 
+  addCircleMarkers(data = zero_twohalf, lng = ~Longitude, lat = ~Latitude, radius = 1, color = "orangered", fillOpacity = 0.5, group = "Between 0% and 2.5% Per Annum") %>%
+  addCircleMarkers(data = twohalf_five, lng = ~Longitude, lat = ~Latitude, radius = 1, color = "orange", fillOpacity = 0.5, group = "Between 2.5% and 5% Per Annum") %>%
+  addCircleMarkers(data = five_sevenhalf, lng = ~Longitude, lat = ~Latitude, radius = 1, color = "darkseagreen", fillOpacity = 0.5, group = "Between 5% and 7.5% Per Annum") %>%
+  addCircleMarkers(data = sevenhalf_plus, lng = ~Longitude, lat = ~Latitude, radius = 1, color = "darkgreen", fillOpacity = 0.5, group = "More than 7.5% Per Annum") %>%
+   addPolygons(data = myCircles1, lng = ~lon, lat = ~lat, color = "black", fillOpacity = 0, group = "1km Ring") %>%
+   addPolygons(data = myCircles2, lng = ~lon, lat = ~lat, color = "black", fillOpacity = 0, group = "2km Ring") %>%
+   addPolygons(data = myCircles3, lng = ~lon, lat = ~lat, color = "black", fillOpacity = 0, group = "3km Ring") %>%
+   addPolygons(data = myCircles4, lng = ~lon, lat = ~lat, color = "black", fillOpacity = 0, group = "4km Ring") %>%
+   addPolygons(data = myCircles5, lng = ~lon, lat = ~lat, color = "black", fillOpacity = 0, group = "5km Ring") %>%
+ addLayersControl(overlayGroups = c("Less than 0% Per Annum", "Between 0% and 2.5% Per Annum", "Between 2.5% and 5% Per Annum", "Between 5% and 7.5% Per Annum", "More than 7.5% Per Annum", "1km Ring", "2km Ring", "3km Ring", "4km Ring", "5km Ring"))
+
+Brisbane_Map2
+```
+
+The map shows that despite losses having occurred throughout Inner Brisbane with no one particular location in focus, the stronger gains above 5% per annum have been predominantly achieved in the suburbs of New Farm and Teneriffe. These two suburbs are consistently two of Brisbane's most expensive and best performing due their prime location within 3km of the Brisbane CBD and along the Brisbane River with a popular park and river walk, an abundance of restaurants and entertainment options.
+
+## DISPERSION OF CAPITAL GROWTH
+
+The following graph analysies the spread of annual capital growth rates that were achieved on unit resales throughout Inner Brisbane over the last 12 months ending September 2018. Red bars indicate a negative growth rate while green bars indicate a positive growth rate. While the market is emerging from a period of weakness, gains still far outweigh losses. 
+```{r Density Histogram of capital growth, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE, fig.align = "centre", height = 10}
+
+# create conditional fill column
+resale_merge$positive_growth <- ifelse(resale_merge$`Annual Capital Growth` > 0, "Positive Growth", "Negative Growth")
+
+# Create density histogram
+
+ggplot(resale_merge, aes(`Annual Capital Growth` * 100, fill = positive_growth)) +
+  geom_histogram(binwidth = 1, colour = "black", aplha = 0.5, position = position_dodge(width = 2)) +
+  scale_fill_manual(values = c("darkred", "darkgreen")) +
+  xlim(-15, 15) +
+  geom_vline(xintercept = 0, size = 1, colour = "black") +
+  geom_vline(xintercept = 5, size = 1, colour = "black") +
+  geom_vline(xintercept = -5, size = 1, colour = "black") +
+   theme(legend.title = element_blank(), 
+        legend.position = "right",
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black")) +
+  labs(x = "Average Annual Capital Growth (%)",
+       y = "Number of Sales",
+       title = "Recorded Growth Rate on Reslaes",
+       caption = " Average Annual Growth of Result Units: 12 Months to September 2018") 
+ 
+
+```
+
+As can be seen in the graph, the majority of resales recorded an annual growth rate of between -5% to 5% per annum. Positively, unit resales have recorded more positive growth rates than negative growth rates. Overall, of resales during the 12 month period to September 2018 recorded positive growth. To read our past report on Brisbane's best performing suburbs [click here](http://www.placeprojects.com.au/brisbanes-best-performing-suburbs-2/)
+
+After analysing the Inner Brisbane unit market by breaking it down into five different categories, Place Advisory has revealed that after recent weakness, the Inner Brisbane market is showing signs of a stabilising market and early signs returning to positive growth. This comes as no surprise when considering strong and increasing population growth, an improving economy and a sharp reduction in new unit supply to the region as outlined in our [previous reports](http://www.placeprojects.com.au/research/). Despite stricter lending conditions in the current economic environment, the future potential for price growth remains strong for Brisbane.
+
+&nbsp; 
+&nbsp; 
+&nbsp; 
+&nbsp; 
+&nbsp; 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

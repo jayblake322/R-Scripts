@@ -1,0 +1,220 @@
+---
+title: "Brisbane's Most Prestigous"
+author: "Place Advisory"
+date: "2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Load Data, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+# Load Library
+library(readr)
+
+# load inner Brisbane sales data
+house_data <- read_csv("R:/Projects/Market Analysis and Database Records/Sales Data/Sales Data CSV Files/MASTER FILE Brisbane Inner Ring House Sales Data.csv")
+unit_data <- read_csv("R:/Projects/Market Analysis and Database Records/Sales Data/Sales Data CSV Files/MASTER FILE Brisbane Inner Ring UNIT Sales Data.csv")
+
+```
+
+```{r Load, Join and Manipulate building and  Unit Data, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+# load readxl library
+library(readxl)
+
+# load building data to join - excel file
+buildingFilePath <- "R:/Projects/Market Analysis and Database Records/Building Database/Brisbane Building Database.xlsx"
+
+excel_sheets(buildingFilePath)
+
+building_data <- read_excel(buildingFilePath, sheet = "Final Building List")
+
+# load library for data manipulation
+library(dplyr)
+
+# remove some unwanted rows
+building_data1 <- building_data %>%
+  select(1:2, 7, 9:10)
+
+# check data classes and inspect the data
+glimpse(building_data1)
+
+# change column names 
+
+names_building <- c("planNo", "buildingName", "waterfront", "lat", "lon") # name vector
+
+# change classes and set names
+building_data2 <- building_data1 %>%
+  `colnames<-`(names_building) %>% # change column names during piping code
+  mutate(waterfront = as.factor(waterfront))
+  
+
+# clean unit data and merge with building data
+
+library(lubridate) # load library to change columns into dates
+library(stringi) # load library to change suburb to proper format
+
+names_units <- c("entryIdentifier", "suburb", "postcode", "buildingLotNumber", "type", "salePrice", "saleDate", "period")    # names vector
+  
+unit_data_merge <- unit_data %>%
+  select(1,7:8, 10:11, 16:17, 22) %>%
+  `colnames<-`(names_units) %>% # change column names during piping code
+  mutate(suburb = as.factor(suburb)) %>%
+  mutate(suburb = stri_trans_totitle(suburb)) %>%
+  mutate(postcode = as.factor(postcode)) %>%
+  mutate(type = as.factor(type)) %>%
+  mutate(salePrice = as.integer(gsub("[$|,]", "", salePrice))) %>%
+  mutate(saleDate = dmy(saleDate)) %>%
+  mutate(period = as.ordered(period)) %>%
+  left_join(building_data2, by = c("buildingLotNumber" = "planNo")) 
+
+```
+
+```{r Clean House Data and Combine with Unit Data, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+# load address data for join
+house_coords <- read_csv("R:/Projects/Market Analysis and Database Records/Sales Data/Sales Data CSV Files/Geocoded House Sale Addresses Inner Ring 10 Years to September 2018.csv") %>%
+  select(1, 5, 3, 2) %>%
+  mutate(WaterFront = as.factor(WaterFront)) %>%
+ `colnames<-`(c("geo", "water", "lat", "lon"))
+
+# clean house data
+house_data_clean <- house_data %>%
+  select(1:2,7:8, 10:11, 16:17, 22) %>%
+  mutate(Locality = as.factor(Locality)) %>%
+  mutate(Postcode = as.factor(Postcode)) %>%
+  mutate(`Property Type` = as.factor(`Property Type`)) %>%
+  mutate(`Sale Price` = as.integer(gsub("[$|,]", "", `Sale Price`))) %>%
+  mutate(`Sale Date` = dmy(`Sale Date`)) %>%
+  mutate(`6 month Period` = as.ordered(`6 month Period`)) %>%
+  mutate(redundant1 = NA) %>% # add redundant column for merge 
+  left_join(house_coords, by = c("Geocode Address" = "geo")) %>%
+  select(-2) %>%
+  `colnames<-`(names(unit_data_merge))
+  
+# combine with unit data
+sales_data <- rbind.data.frame(unit_data_merge, house_data_clean)
+  
+```
+
+```{r Merge All Property Types, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+# filter for data from 2008 september and 2018 september inclusive
+sales_data1 <- sales_data %>%
+filter(period >= "2008 September" & period < "2019 March") 
+
+# drop unwanted factor levels from period
+sales_data2 <- sales_data1 %>%
+  mutate(period = droplevels(sales_data1$period, exclude = if(anyNA(levels(sales_data1$period))) NULL else NA))
+
+```
+
+```{r Create Distance Variable and Filter, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+# calculate distance and remove sales more than 5km from Brisbane Centre
+
+library(geosphere) # load library to calculate distance
+
+brisbaneCentre <- c(153.0234991, -27.4689682)
+
+sales_data3 <- sales_data2 %>%
+  rowwise() %>%
+  mutate(distance = round(distHaversine(c(lon, lat), brisbaneCentre)/1000,3)) %>% # static Brisbane coordinates
+  filter(distance <= 5)
+
+# data written for use in tableau ########
+write.csv(sales_data3, "tabluea data1 most prestigous 2019.csv")
+```
+
+```{r Summary Sales Data, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+library(stringr) # for string manipulation on date
+library(rebus) # for easier string manipulation
+
+summary_sales_data <- sales_data3 %>%
+  group_by(period, type, waterfront) %>%
+  summarise(price = median(salePrice), volumes = n()) %>%
+  filter(type != "Townhouses") %>%
+  mutate(month = str_extract(period, WRD %R% END)) %>% # extract month identifier for period
+  mutate(endMonthDay = ifelse(month == "r", 30, 31)) %>% # paste day of month
+  mutate(period1 = as.Date(paste(period, endMonthDay, sep = " "), format = "%Y %B %d")) %>% # join columns and create as date variable
+  select(-c(6:7))
+
+# data is written for use in Tableau
+write.csv(summary_sales_data, "tableau data2 most prestigous 2019.csv")
+
+```
+
+```{r Quantiles, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+# filter data for last 12 months only
+sales_data_one_year <- sales_data3 %>%
+  filter(period > "2017 September") 
+
+# split by property type into houses and apartments
+
+split_property <- function(x, filter){
+  x %>% filter(type == filter)
+}
+
+Apartments <- split_property(sales_data_one_year, "Apartments")
+Houses <- split_property(sales_data_one_year, "House")
+    
+# calulate percentile
+quantileProbs <- seq(0.00,1, by = 0.1) # quantile probs
+quantilesApartments <- quantile(Apartments$salePrice, probs = quantileProbs) # calculated quantile prices for apartments
+quantilesHouses <- quantile(Houses$salePrice, probs = quantileProbs) # calculated quantile prices for Houses
+quantileRank <- seq(0, 10, 1) # vector 1:100 to match quantiles
+quantileMatrixApt <- as.data.frame(cbind(quantilesApartments, quantileRank)) # join apartments into matrix
+quantileMatrixHouse <- as.data.frame(cbind(quantilesHouses, quantileRank)) # join Houses into matrix
+quantileMatrixApt <- quantileMatrixApt[2:11, ] # remove last row
+quantileMatrixHouse <- quantileMatrixHouse[2:11, ] # remove last row
+
+# --- Apartment quantile plot ----plot(quantileMatrixApt$quantileRank[1:9], quantileMatrixApt$quantilesApartments[1:9])
+
+# --- House quantile plot ---- plot(quantileMatrixHouse$quantileRank[1:9], quantileMatrixHouse$quantilesApartments[1:9])
+
+
+# assign quantile amount to sale price of apartments and houses
+apartments_quantiles <- within(Apartments, quantile <- as.integer(cut(salePrice, quantile(salePrice, probs = quantileProbs), include.lowest = TRUE)))
+
+house_quantiles <- within(Houses, quantile <- as.integer(cut(salePrice, quantile(salePrice, probs = quantileProbs), include.lowest = TRUE)))
+
+# create corresponding variable for quantile price for quantile rank with join for both apartments and townhouses
+apartments_quantiles2 <- left_join(apartments_quantiles, quantileMatrixApt, by = c("quantile" = "quantileRank")) %>%
+  mutate(quantile = quantile * 10) %>%
+  rename(quantilePrice = 15)
+ 
+house_quantiles2 <- left_join(house_quantiles, quantileMatrixHouse, by = c("quantile" = "quantileRank")) %>%
+  mutate(quantile = quantile * 10) %>%
+  rename(quantilePrice = 15)
+
+# join the sales data back together
+quantile_sales_data <- as.data.frame(rbind(house_quantiles2, apartments_quantiles2))
+
+# write the sales data for use in tableau
+write.csv(quantile_sales_data, "tableau 3 most prestigous 2019.csv")
+```
+
+```{r Kable of top 20 houses and apartment sales, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+
+library(kableExtra)
+
+Suburb <- stri_trans_totitle(c("NEW FARM", "NEW FARM", "KANGAROO POINT", "SOUTH BRISBANE", "NEW FARM", "HAWTHORNE", "ASCOT", "HAMILTON", "YERONGA", "FIG TREE POCKET"))
+`Sale Price` <- c("$6,500,000", "$4,400,000", "$4,000,000", "$3,887,614", "$3,750,000", "$11,128,888", "$11,000,000", "$10,138,888", "$7,825,000", "$7,500,000")
+Waterfront <- c("Waterfront", "Waterfront", "Waterfront", "Non-Waterfront", "Waterfront", "Waterfront", "Non-Waterfront", "Non-Waterfront", "Waterfront", "Waterfront")
+
+most_expensive <- as.matrix(cbind(Suburb, Sale_Price, Waterfront))
+
+kable(most_expensive[c(6:10,1:5), ], caption = "Brisbane's Most Prestigous Sales", col.names = c("Suburb", "Sale Price", "Location")) %>%
+  kable_styling("striped", full_width = F) %>%
+  group_rows("Apartments", 6, 10) %>%
+  group_rows("Houses", 1, 5)
+
+```
+
+
+

@@ -1,0 +1,867 @@
+---
+title: "Brisabne investors In Inner Ring Houses"
+author: "Jay Blake - Place Projects"
+date: "November 28, 2018"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Libraries
+
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(kableExtra)
+library(geosphere)
+library(dygraphs)
+library(xts)
+library(ggplot2)
+library(sf)
+library(gganimate)
+library(ggmap)
+library(ggthemes)
+library(lubridate)
+library(stringr)
+library(plotly)
+library(tmap)
+library(leaflet)
+
+
+key<-"AIzaSyCc8qDD_PMFHTQkZb3Pm0sykFqqIXAnX0s" # Set API Key
+register_google(key = key)
+
+```
+
+# Abstract
+
+# Introduction
+
+# Data
+
+```{r Loading and Cleaning Sales Data, include=FALSE}
+#Load Data
+house_data <- read.csv("10 Year House Sales Data Inner Brisbane to September 2018.csv", header = TRUE, sep = ",")
+
+# Change variable classes
+house_data1 <- house_data %>%
+  mutate(Geocode.Address = as.character(Geocode.Address)) %>%
+  mutate(Postcode = as.factor(Postcode)) %>%
+  mutate(Legal.Description = as.character(Legal.Description)) %>%
+  mutate(Vendor.Address = as.character(Vendor.Address)) %>%
+  mutate(Purchaser.Address = as.character(Purchaser.Address)) %>%
+  mutate(Sale.Price = gsub("[$]", "", Sale.Price)) %>%
+  mutate(Sale.Date = as.Date(Sale.Date, format = "%d/%m/%Y")) %>%
+  mutate(Area = as.integer(Area)) %>%
+  mutate(Bedrooms = as.factor(Bedrooms)) %>%
+  mutate(Bathrooms = as.factor(Bathrooms)) %>%
+  mutate(Car.Parks = as.integer(Car.Parks)) %>%
+  mutate(X6.month.Period = as.ordered(X6.month.Period)) 
+
+# Further data manipulation
+house_data1 <- house_data1 %>%
+  mutate(Sale.Price = as.integer(gsub("[,]", "", Sale.Price))) %>%
+  select(1:2,7:8,11,13,15:23)
+
+# Set variable names
+names(house_data1) <- c("Entry_ID", "Geo_Address", "Suburb", "Postcode", "V_Address", "P_Address", "Price", "Date", "Area", "Bed", "Bath", "Car", "Period", "Status", "Buyer_Country")
+
+```
+
+```{r Table of Sales Data Data Set, echo=FALSE}
+
+# vector of variable names
+variable_names <- c("Entry ID", "Geocode Address", "Street Display", "Unit Number", "Street Number", "Street Name", "Suburb", "Postcode", "Lot Number", "Vendor Name", "Vendor Address", "Buyer Name", "Buyer Address", "Days to Sell", "Sale Price", "Sale Date", "Area", "Number of Bedrooms", "Number of Bathrooms", "Number of Carspaces", "Six Month Period", "Property Status", "Buyer Country")
+
+# vector of variable types
+Variable_type <- c("Character String", "Character String", "Character String", "Numeric Integer", "Numeric Integer", "Character String", "Unordered Factor", "Unordered Factor", "Character String", "Character String", "Character String", "Character String", "Character String", "Numeric Integer", "Numeric Integer", "Date", "Numeric Integer", "Unordered Factor", "Unordered Factor", "Unordered Factor", "Ordered Factor", "Unordered Factor", "Unordered Factor")
+
+# Vector of variable descriptions
+variable_description <- c("Unique ID of Sale", "Address for Geocoding", "Street Name and Number", "Unit Number (N/A for this data)", "House - Number in Street", "House - Name of Street", "House - Suburb", " House - Postcode", "House - Land Lot Number", "House Owner Name", "House Owner Address at Sale", "House Purchaser Name", "House Purchaser Address at Time of Contract/Settlement", "Days the House was Advertised Before Sold", "House - Sale Price", "Date of Contract Signing and Acceptance", "Land Size", "Number of Bedrooms in the House", "Number of Bathrooms in the House", "Number of Carspaces at the House Residence", "The Six Month Period Ending Date For Sale Date", "First or Subsequent Sale of the House", "Country of Residence at Sale Date of the Buyer" )
+
+# combine vectors for table
+sales_data_variable_table <- as.data.frame(cbind(variable_names, Variable_type, variable_description))
+
+# Set Table Names
+names(sales_data_variable_table) <- c("Variable Name", "Variable Type", "Variable Description")
+
+kable(sales_data_variable_table) %>%
+  kable_styling()
+
+```
+
+```{r Loading and Cleaning Buyer Address Coordinates, include=FALSE}
+
+# Load data
+Buyer_Addresses <- read.csv("Geocoded House Buyer Address 10 Years to September 2018.csv", sep = ",", header = TRUE)
+
+# Change classes
+Buyer_Addresses1 <- Buyer_Addresses %>%
+  mutate(Purchaser.Address = as.character(Purchaser.Address))
+
+# Set names
+names(Buyer_Addresses1) <- c("Buyer_Address", "B_Lat", "B_Lon")
+glimpse(Buyer_Addresses)
+```
+
+```{r Table of Geocoded Buyer Address Data Set, echo=FALSE}
+
+variable_names1 <- c("Purchaser Address", "Latitude", "Longtitute")
+Variable_type1 <- c("Character String", "Numeric Double", "Numeric Double")
+variable_description1 <- c("Address of the investor at sale date", "Mapping coordinate", "Mapping coordinate")
+
+table2 <- as.data.frame(cbind(variable_names1, Variable_type1, variable_description1))
+
+names(table2) <- c("Variable Names", "Variable Types", "Variable Description")
+
+kable(table2) %>%
+  kable_styling()
+
+```
+
+```{r Loading and Cleaning House Address Coordinates, include=FALSE}
+
+# Load data
+House_Address <- read.csv("House Property Geocoded Addresses Inner Ring 10 Years to September 2018.csv", sep = ",", header = TRUE)
+
+# Change classes
+House_Addresses1 <- House_Address %>%
+  mutate(Address.to.Geocode = as.character(Address.to.Geocode)) %>%
+  mutate(Geocoded.Address = as.character(Geocoded.Address)) %>%
+  select(1,3,2)
+
+# Set names
+names(House_Addresses1) <- c("House_Address", "H_Lat", "H_Lon")
+
+```
+
+```{r House Address Data Set Description, echo=FALSE}
+
+variable_names2 <- c("House Address", "Latitude", "Longtitute")
+Variable_type2 <- c("Character String", "Numeric Double", "Numeric Double")
+variable_description2 <- c("Address of the house that is sold", "Mapping coordinate", "Mapping coordinate")
+
+table3 <- as.data.frame(cbind(variable_names2, Variable_type2, variable_description2))
+
+names(table3) <- c("Variable Names", "Variable Types", "Variable Description")
+
+kable(table3) %>%
+  kable_styling()
+
+```
+
+```{r Loading BrisbaneLGA Postcodes and table description, include=FALSE}
+
+# Load postcode data
+postcodes <- read.csv("BrisbaneLGA Postcodes.csv", sep = ",", header = TRUE) %>%
+  mutate(Post.Code = as.factor(Post.Code))
+
+variable_names3 <- "Postcode"
+Variable_type3 <- "Unordered Factor"
+variable_description3 <- "4 Digit postcodes for all suburbs within 20km of the Brisbane CBD"
+
+table4 <- as.data.frame(cbind(variable_names3, Variable_type3, variable_description3))
+
+names(table4) <- c("Variable Names", "Variable Types", "Variable Description") 
+
+kable(table4) %>%
+  kable_styling()
+
+
+```
+
+```{r Load Australian SA2 Polygons, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+# Load polygons | two files because too large
+ Mainland_Polygons <- read.csv("Australia Mainland SA2 Polygons.csv", sep = ",", header = TRUE)
+ Tas_Polygons <- read.csv("Tasmania SA2 Polygons.csv", sep = ",", header = TRUE)
+
+# make both files the same headers
+
+ names <- c("GCCSA_Code", "GCCSA_Name", "Lat", "Lon", "PointID", "PolygonID", "SA2_FDCode", "SA2_Main_Code", "SA2_Name", "SA3_Code", "SA3_Name", "SA4_Code", "SA4_Name", "State_Code", "State_Name", "Type", "Number_of_Records")
+
+ names(Mainland_Polygons) <- names
+ names(Tas_Polygons) <- names
+
+ # join files
+ Aus_Sa2_Polygons <- rbind(Mainland_Polygons, Tas_Polygons)
+
+# Load brisbane polygons
+brisbane_polygons <- read.csv("Brisbane_Polygons.csv", sep = ",", header = TRUE)
+
+# set names
+names(brisbane_polygons) <- c("SA2_Name", "Lat", "Lon", "Point_ID", "No_Investors")
+```
+
+```{r Polygon SA2 Data Set Description}
+
+variable_names4 <- c("SA2 Name", "Latitude", "Longtitude", "Point ID")
+Variable_type4 <- c("Unordered Factor", "Numeric Double", "Numeric Double", "Numeric Integer")
+variable_description4 <- c("Government Stipulated SA2 Area", "Mapping coordinate", "Mapping coordinate", "Path Order Number for Polygon Drawing")
+
+table5 <- as.data.frame(cbind(variable_names4, Variable_type4, variable_description4))
+
+names(table5) <- c("Variable Names", "Variable Types", "Variable Description") 
+
+kable(table5) %>%
+  kable_styling()
+
+```
+
+```{r Load BrisbaneLGA SA2 Names}
+
+# Load brisbane SA2 Names
+Bris_SA2_List <- read.csv("Brisbane_LGA_SA2_Names.csv", sep = ",", header = TRUE)
+
+# set classes
+Bris_SA2_List$Post.Code <- as.factor(Bris_SA2_List$PostCode)
+
+# Load suburb sales for house_data_5
+entry_hd5 <- read.csv("Entry_Suburb_HD5.csv", sep = ",", header = TRUE)
+```
+
+```{r Brisabane SA2 Area Dataset Description, echo=FALSE}
+
+variable_names5 <- c("Suburb Name", "SA2 Name", "Postcode")
+Variable_type5 <- c("Unordered Factor", "Unordered Factor", "Unordered Factor")
+variable_description5 <- c("Brisbane LGA Suburb Name", "Corresponding SA2 Name", "Corresponding Postcode")
+
+table6 <- as.data.frame(cbind(variable_names5, Variable_type5, variable_description5))
+
+names(table6) <- c("Variable Names", "Variable Types", "Variable Description") 
+
+kable(table6) %>%
+  kable_styling()
+
+
+```
+
+```{r Load Median Price by Period, Suburb and Type Summar, include=FALSE}
+
+# Load median summary data
+median_summary <- read.csv("Suburb_Summary.csv", sep = ",", header = TRUE)
+
+# change period to ordered factor
+median_summary <- median_summary %>%
+  mutate(X6.Month.Period = as.ordered(X6.Month.Period)) 
+
+# set variable names
+names(median_summary) <- c("Ring", "Period", "Type", "Suburb", "Price", "Number")
+
+
+```
+
+
+# Methodology
+
+1. extract state from buyer address
+
+```{r Extract State, include=FALSE}
+# Extract State and overseas buyers 
+house_data1 <- house_data1 %>%
+  mutate(P_Location = ifelse(str_detect(P_Address, "QLD") & Buyer_Country == "Australia", "QLD", 
+                  ifelse(str_detect(P_Address, "NSW") & Buyer_Country == "Australia", "NSW",
+                    ifelse(str_detect(P_Address, "NT") & Buyer_Country == "Australia", "NT",
+                      ifelse(str_detect(P_Address, "VIC") & Buyer_Country == "Australia", "VIC", 
+                       ifelse(str_detect(P_Address, "SA") & Buyer_Country == "Australia", "SA", 
+                         ifelse(str_detect(P_Address, "WA") & Buyer_Country == "Australia", "WA", 
+                            ifelse(str_detect(P_Address, "TAS") & Buyer_Country == "Australia", "TAS",
+                              ifelse(str_detect(P_Address, "ACT") & Buyer_Country == "Australia", "ACT", "OTHER"))))))))) 
+
+
+```
+
+
+```{r Fixing State Anomalies, include=FALSE}
+
+# Fixing Anomolies that were found when mapping - Next time use an easier code
+house_data1$P_Location[house_data1$P_Address == "7 GARNET STREET, BRUNSWICK, VIC, 3056, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "24 HOLLOWAY ROAD, BRUNSWICK, VIC, 3056, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "54 HELLER STREET, BRUNSWICK WEST, VIC, 3055, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "260 BRUNSWICK ROAD, BRUNSWICK, VIC, 3056, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "19 LYDIA STREET, BRUNSWICK, VIC, 3056, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "19 BENNIE STREET, BRUNSWICK, VIC, 3056, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "13 DANIELLA WALKWAY , BRUNSWICK EAST, VIC, 3057, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "13 DIANELLA WAY, BRUNSWICK EAST, VIC, 3057, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "4 LOWAN STREET, BRUNSWICK EAST, VIC, 3057, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "499 BLYTH STREET, BRUNSWICK EAST, VIC, 3057, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "248 STEWART STREET, BRUNSWICK, VIC, 3056, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "37 CAMBERWELL STREET, EAST VICTORIA PARK, WA, 6101, AUS"] <- "WA"
+house_data1$P_Location[house_data1$P_Address == "162 HINDMARSH ROAD, VICTOR HARBOR, SA, 5211, AUS"] <- "SA"
+house_data1$P_Location[house_data1$P_Address == "51 TASMANIA CIRCLE, FORREST, ACT, 2603, AUS"] <- "ACT"
+house_data1$P_Location[house_data1$P_Address == "25 PELSART STREET, RED HILL, ACT, 2603, AUS"] <- "ACT"
+house_data1$P_Location[house_data1$P_Address == "21 GALMARRA STREET, NGUNNAWAL, ACT, 2913, AUS"] <- "ACT"
+house_data1$P_Location[house_data1$P_Address == "10 HOWARTH PLACE, CHAPMAN, ACT, 2611, AUS"] <- "ACT"
+
+house_data1$P_Location[house_data1$P_Address == "23 BLOODWOOD CRESCENT, DERBY, WA, 6728, AUS"] <- "WA"
+house_data1$P_Location[house_data1$P_Address == "5 GANBARR STREET, BAYNTON, WA, 6714, AUS"] <- "WA"
+house_data1$P_Location[house_data1$P_Address == "21 GROSMONT GLADE , LESCHENAULT, WA, 6233, AUS"] <- "WA"
+house_data1$P_Location[house_data1$P_Address == "45 BRINDABELLA CRESCENT, HALLS HEAD, WA, 6210, AUS"] <- "WA"
+house_data1$P_Location[house_data1$P_Address == "27 CYGNET CRESCENT, DALKEITH, WA, 6009, AUS"] <- "WA"
+house_data1$P_Location[house_data1$P_Address == "74 MILL POINT ROAD, SOUTH PERTH, WA, 6151, AUS"] <- "WA"
+house_data1$P_Location[house_data1$P_Address == "12 FANTAIL AVENUE, GWELUP, WA, 6018, AUS"] <- "WA"
+house_data1$P_Location[house_data1$P_Address == "24 ROSS AVENUE, SORRENTO, WA, 6020, AUS"] <- "WA"
+house_data1$P_Location[house_data1$P_Address == "55 ALBACORE DRIVE, SORRENTO, WA, 6020, AUS"] <- "WA"
+house_data1$P_Location[house_data1$P_Address == "31 ROMANO CRESCENT, ILUKA, WA, 6028, AUS"] <- "WA"
+house_data1$P_Location[house_data1$P_Address == "64 WILLIAMS ROAD, MILLICENT, SA, 5280, AUS"] <- "SA"
+house_data1$P_Location[house_data1$P_Address == "7 BUCHAN CRESCENT, FORDE, ACT, 2914, AUS"] <- "ACT"
+house_data1$P_Location[house_data1$P_Address == "32 BIZANT STREET, AMAROO, ACT, 2914, AUS"] <- "ACT"
+house_data1$P_Location[house_data1$P_Address == "395 ANTILL STREET, WATSON, ACT, 2602, AUS"] <- "ACT"
+house_data1$P_Location[house_data1$P_Address == "87 ANTILL STREET, DOWNER, ACT, 2602, AUS"] <- "ACT"
+house_data1$P_Location[house_data1$P_Address == "52 CLIANTHUS STREET, O`CONNOR, ACT, 2602, AUS"] <- "ACT"
+house_data1$P_Location[house_data1$P_Address == "3 TENNYSON CRESCENT, FORREST, ACT, 2603, AUS"] <- "ACT"
+house_data1$P_Location[house_data1$P_Address == "3 HACKING CRESCENT, NARRABUNDAH, ACT, 2604, AUS"] <- "ACT"
+house_data1$P_Location[house_data1$P_Address == "73 MACALISTER CRESCENT, CURTIN, ACT, 2605, AUS"] <- "ACT"
+house_data1$P_Location[house_data1$P_Address == "10 HOWARTH PLACE, CHAPMAN, ACT, 2611, AUS"] <- "ACT"
+house_data1$P_Location[house_data1$P_Address == "48 WILSMORE CRESCENT, CHIFLEY, ACT, 2606, AUS"] <- "ACT"
+
+house_data1$P_Location[house_data1$P_Address == "416 UNA STREET, MOUNT STUART, TAS, 7000, AUS"] <- "TAS"
+house_data1$P_Location[house_data1$P_Address == "531 CREAMERY ROAD, TYNTYNDER, VIC, 3586, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "27 VALENTINE STREET, BENDIGO, VIC, 3550, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "155 THORNTONS ROAD, DIXIE, VIC, 3265, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "SCOTTS CHARTERED ACCOUNTANTS410 PAKINGTON STREET, NEWTOWN, VIC, 3220, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "11 VIEWBANK COURT, POINT COOK, VIC, 3030, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "9 AUSTEN CRESCENT, YARRAVILLE, VIC, 3013, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "38 MERCANTILE PARADE, KENSINGTON, VIC, 3031, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "62 CONVENTY STREET, SOUTHBANK, VIC, 3006, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "137 CANTERBURY ROAD, MIDDLE PARK, VIC, 3206, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "33 HINTON LANE, PRAHRAN, VIC, 3181, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "29 GLEN HUNTLY ROAD, ELWOOD, VIC, 3184, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "29 WIDDOP CRESCENT, HAMPTON EAST, VIC, 3188, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "45 HENTY STREET, RESERVOIR, VIC, 3073, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "6 ADVANTAGE DRIVE, DANDENONG SOUTH, VIC, 3164, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "6 ADVANTAGE DRIVE, DANDENONG SOUTH, VIC, 3175, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "12 TARUNA RISE, MONTROSE, VIC, 3765, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "1488 FERNTREE GULLY ROAD, KNOXFIELD, VIC, 3180, AUS"] <- "VIC"
+
+house_data1$P_Location[house_data1$P_Address == "15 ANTIBES ST, PARKDALE, VIC, 3195, AUSTRALIA"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "1A LEIGH STREET, BENTLEIGH EAST, VIC, 3165, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "46 AMBRIE CRESCENT, NOBLE PARK, VIC, 3174, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "15 GLENVALE CRESCENT, MULGRAVE, VIC, 3170, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "3 TETRAGONA QUADRANT , ROWVILLE, VIC, 3178, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "113 JENOLA PARADE, WANTIRNA SOUTH, VIC, 3152, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "18 BATES AVENUE, UPPER FERNTREE GULLY, VIC, 3156, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "69 STANLEY AVENUE, MOUNT WAVERLEY, VIC, 3149, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "5 MINERVA CRESCENT, VERMONT SOUTH, VIC, 3133, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "2 MINDAH COURT, VERMONT SOUTH, VIC, 3133, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "7 IAN CRESCENT, MITCHAM, VIC, 3132, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "110 WINDSOR CRESCENT, SURREY HILLS, VIC, 3127, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "1 KINOCH AVENUE, MONT ALBERT, VIC, 3127, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "31 CLEVELAND AVENUE, LOWER PLENTY, VIC, 3093, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "70 MAUNT STREET, HEIDELBERG, VIC, 3084, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "483 PLENTY ROAD, PRESTON, VIC, 3072, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "18 ROTHSCHILD STREET, GLEN HUNTLY, VIC, 3163, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "1 BEATTY CRESCENT, ORMOND, VIC, 3204, AUS"] <- "VIC"
+house_data1$P_Location[house_data1$P_Address == "16 RUBENS GROVE, CANTERBURY, VIC, 3126, AUS"] <- "VIC"
+
+
+```
+
+ Determine Investor
+
+```{r Determining Investors, include=FALSE}
+
+# Join Coordinates
+
+House_Data1_Wcoords <- left_join(house_data1, House_Addresses1, by = c("Geo_Address" = "House_Address"))
+House_Data1_Wcoords <- left_join(House_Data1_Wcoords, Buyer_Addresses1, by = c("P_Address" = "Buyer_Address"))
+
+# Create DF
+Distance_Dataframe <- House_Data1_Wcoords %>%
+  select(1,17:20)
+
+# Calculate Distance as new variable
+Distance_Dataframe <- Distance_Dataframe %>% rowwise() %>% 
+           mutate(Distance = round(distHaversine(c(H_Lon, H_Lat), c(B_Lon, B_Lat))/1000,3))
+                  
+# Choose Investor|Owner Occupier <50m
+
+Distance_Dataframe <- Distance_Dataframe %>%
+  mutate(Status = ifelse(Distance <0.050, "Owner Occupier", "Investor"))
+
+# Join distance and status to main dataframe 
+house_data2 <- left_join(house_data1, Distance_Dataframe, by = c("Entry_ID" = "Entry_ID"))
+
+high_cutoff <- length(Distance_Dataframe$Distance[Distance_Dataframe$Distance <0.05])
+mid_cutoff <- length(Distance_Dataframe$Distance[Distance_Dataframe$Distance <0.025])
+low_cutoff <- length(Distance_Dataframe$Distance[Distance_Dataframe$Distance <0.01])
+length_buyers <- length(Distance_Dataframe$Distance)
+
+```
+
+`r high_cutoff/length_buyers`
+`r mid_cutoff/length_buyers`
+`r low_cutoff/length_buyers`
+
+Determine if buyer is from Brisbane LGA 
+
+```{r Determine BrisbaneLGA Based Buyers, include=FALSE}
+
+# Determine Brisbane Buyers
+house_data2 <- house_data2 %>%
+  mutate(Buyer_Postcode = substr(sapply(strsplit(P_Address, "QLD, ", fixed = FALSE), "[",2), 1, 4)) %>% # Extract QLD postcodes
+  mutate(BrisbaneLGA_Buyer = Buyer_Postcode %in% Bris_SA2_List$PostCode) %>% # Determine if Postcode is in BrisbaneLGA
+  select(-c("Buyer_Postcode")) # Drop QLD buyer postcodes
+
+```
+
+
+# Results and Discussion
+
+## 4. WHere are Buyers Coming From
+
+### 4.1 Over the Last 10 Years
+
+```{r Summary Table Buyer State/Overseas, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+# Create summary dataframe
+Buyer_Macro_Location <- house_data2 %>%
+  filter(Status.y == "Investor") %>%
+  group_by(Buyer_Country) %>%
+  summarise(Total = n()) %>%
+  arrange(desc(Total))
+
+Buyer_Macro_Location <- Buyer_Macro_Location %>%
+  mutate(Proportion_Investors = paste(round(Total/sum(Total)*100, 2), "%", sep = "")) %>%
+  mutate(Proportion_Total = paste(round(Total/length(house_data2$Status.y)*100, 2), "%", sep = ""))
+  
+# Create table 
+kable(Buyer_Macro_Location, caption = "Table.1 - Investors by Location, Number and Proportion") %>%
+  kable_styling()
+```
+
+```{r Summary Australian State/Territory, echo=FALSE}
+
+Aus_state_summary <- house_data2 %>%
+  filter(P_Location != "OTHER" & Status.y == "Investor") %>%
+  group_by(P_Location) %>%
+  summarise(Number = n()) %>%
+  arrange(desc(Number))
+
+Aus_state_summary <- Aus_state_summary %>%
+  mutate(Proportion = paste(round(Number/sum(Number)*100, 2), "%", sep = "")) %>%
+  mutate(Proportion_Total = paste(round(Number/length(house_data2$Status.y)*100, 2), "%", sep = ""))
+
+kable(Aus_state_summary, caption = "Table.2 - Investors Numbers and Proportions by Australian State/Territory") %>%
+  kable_styling()
+
+```
+
+Map of australian investors
+```{r Map of Australia Investors}
+
+# select only Australian based investors
+house_data4 <- house_data2 %>%
+  filter(Buyer_Country == "Australia" & Status.y == "Investor")
+
+QLD <- house_data4 %>%
+  filter(P_Location == "QLD")
+NSW <- house_data4 %>%
+  filter(P_Location == "NSW")
+VIC <- house_data4 %>%
+  filter(P_Location == "VIC")
+TAS <- house_data4 %>%
+  filter(P_Location == "TAS")
+ACT <- house_data4 %>%
+  filter(P_Location == "ACT")
+SA <- house_data4 %>%
+  filter(P_Location == "SA")
+WA <- house_data4 %>%
+  filter(P_Location == "WA")
+NT <- house_data4 %>%
+  filter(P_Location == "NT")
+
+leaflet(options = leafletOptions(
+  minZoom = 4, dragging = TRUE)) %>% 
+  addProviderTiles("Esri") %>% 
+  addCircleMarkers(data = QLD, lng = ~B_Lon, lat = ~B_Lat, radius = 2, color = "red", label = ~P_Address, group = "Queensland") %>%
+  addCircleMarkers(data = NSW, lng = ~B_Lon, lat = ~B_Lat, radius = 2, color = "blue", label = ~P_Address, group = "New South Wales") %>%
+  addCircleMarkers(data = VIC, lng = ~B_Lon, lat = ~B_Lat, radius = 2, color = "green", label = ~P_Address, group = "Victoria") %>%
+  addCircleMarkers(data = TAS, lng = ~B_Lon, lat = ~B_Lat, radius = 2, color = "black", label = ~P_Address, group = "Tasmania") %>%
+  addCircleMarkers(data = ACT, lng = ~B_Lon, lat = ~B_Lat, radius = 2, color = "orange", label = ~P_Address, group = "Australian Capital Territory") %>%
+  addCircleMarkers(data = SA, lng = ~B_Lon, lat = ~B_Lat, radius = 2, color = "yellow", label = ~P_Address, group = "South Australia") %>%
+  addCircleMarkers(data = WA, lng = ~B_Lon, lat = ~B_Lat, radius = 2, color = "purple", label = ~P_Address, group = "Western Australia") %>%
+  addCircleMarkers(data = NT, lng = ~B_Lon, lat = ~B_Lat, radius = 2, color = "turqoise", label = ~P_Address, group = "Northern Territory") %>%
+  setView(lng = 133.775136, lat = -25.274398, zoom = 4) %>%
+  addLayersControl(overlayGroups = c("Queensland", "New South Wales", "Victoria", "Tasmania", "Australian Capital Territory", "South Australia", "Western Australia", "Northern Territory"))
+?addPolygons
+
+```
+
+
+```{r Investor Proportion, echo=FALSE}
+# Create summary dataframe
+Investor_Proportions <- house_data2 %>%
+  group_by(Status.y, BrisbaneLGA_Buyer) %>%
+  summarise(Total = n()) %>%
+  arrange(desc(Total)) 
+
+# Investor_Proportions | results - 3 anomolies to fix
+
+# fix anomolies
+   
+house_data2$BrisbaneLGA_Buyer[house_data2$Entry_ID == "irh10016139"] <- TRUE
+house_data2$BrisbaneLGA_Buyer[house_data2$Entry_ID == "irh10028920"] <- TRUE
+house_data2$BrisbaneLGA_Buyer[house_data2$Entry_ID == "irh10086662"] <- TRUE
+
+# Re-do summary dataframe
+Investor_Proportions <- house_data2 %>%
+  group_by(Status.y,BrisbaneLGA_Buyer) %>%
+  summarise(Total = n()) %>%
+  arrange(desc(Total)) 
+
+# Add proportions
+Investor_Proportions$Proportion <- paste(round(Investor_Proportions$Total/sum(Investor_Proportions$Total)*100,2),"%", sep = "")
+
+# Create table 
+kable(Investor_Proportions) %>%
+  kable_styling()
+
+```
+
+
+```{r TimeSeries Bar Map Investor Locations, echo=FALSE}
+
+# Split P_Location QLD into Brisbane and Other Queensland
+
+house_data3 <- house_data2 %>%
+  filter(Status.y == "Investor") %>%
+  mutate(P_Location = ifelse(BrisbaneLGA_Buyer == TRUE, "BrisbaneLGA", P_Location))
+
+# Create summary 
+TS_IL_Summary <- house_data3 %>%
+  group_by(Period, P_Location) %>%
+  summarise(Number = n())
+
+# Spread summary
+TS_IL_Summary <- spread(TS_IL_Summary, P_Location, Number)
+
+Period <- TS_IL_Summary$Period # Extract Period
+Period <- paste(30, Period) # Past Day
+Period <- as.Date(Period, format = "%d %Y %B") # change to date format
+
+QLD <- TS_IL_Summary$QLD
+BrisbaneLGA <- TS_IL_Summary$BrisbaneLGA
+ACT <- TS_IL_Summary$ACT
+NSW <- TS_IL_Summary$NSW
+NT <- TS_IL_Summary$NT
+SA <- TS_IL_Summary$SA
+TAS <- TS_IL_Summary$TAS
+VIC <- TS_IL_Summary$VIC
+WA <- TS_IL_Summary$WA
+OTHER <- TS_IL_Summary$OTHER
+class(BrisbaneLGA)
+# Combine vectors
+TS_IL2 <- cbind(BrisbaneLGA, QLD, NSW, VIC, SA, WA, TAS, NT, ACT, OTHER)
+# Remove NAs and replace with 0s
+TS_IL2[is.na(TS_IL2)] <- 0
+
+# Convert data to time series
+TS_IL3 <- xts(TS_IL2, Period,  frequency = 2)
+
+# Plot data on time series graph
+dygraph(TS_IL3, "The Investor Market is Declining in the Inner Brisbane House Market") %>%
+  dyStackedBarGroup(c('OTHER', 'ACT', 'NT', 'SA', 'WA', 'TAS', 'VIC', 'NSW', 'QLD', 'BrisbaneLGA')) %>% # Add order of Stacked Bars
+  dyAxis("y", label = "Nunber of Investor")
+ 
+
+```
+
+
+### 4.2 Brisbane LGA
+
+Heat Map of Brisbane
+
+```{r Make Circles 5km in Maps, include=FALSE}
+
+# 8 Circle example at 450m
+
+
+data = data.frame(
+  ID = as.numeric(c(1:1)), # number of points and there coordinates below
+  longitude = as.numeric(c(153.025124)),
+  latitude = as.numeric(c(-27.469771))
+)
+
+#################################################################################
+# create circles data frame from the centers data frame
+make_circles <- function(centers, radius, nPoints = 100){
+  # centers: the data frame of centers with ID
+  # radius: radius measured in kilometer
+  #
+  meanLat <- mean(centers$latitude)
+  # length per longitude changes with lattitude, so need correction
+  radiusLon <- radius /111 / cos(meanLat/57.3) 
+  radiusLat <- radius / 111
+  circleDF <- data.frame(ID = rep(centers$ID, each = nPoints))
+  angle <- seq(0,2*pi,length.out = nPoints)
+  
+  circleDF$lon <- unlist(lapply(centers$longitude, function(x) x + radiusLon * cos(angle)))
+  circleDF$lat <- unlist(lapply(centers$latitude, function(x) x + radiusLat * sin(angle)))
+  return(circleDF)
+}
+
+# here is the data frame for all circles
+myCircles5 <- make_circles(data, 5) # this is in km therefore 0.45 is 450m
+
+```
+
+
+```{r Make Circles 10km in Maps, include=FALSE}
+
+# 8 Circle example at 450m
+
+
+data = data.frame(
+  ID = as.numeric(c(1:1)), # number of points and there coordinates below
+  longitude = as.numeric(c(153.025124)),
+  latitude = as.numeric(c(-27.469771))
+)
+
+myCircles10 <- make_circles(data, 10) # this is in km therefore 0.45 is 450m
+```
+
+
+```{r Make Circles 20km in Maps, include=FALSE}
+
+# 8 Circle example at 450m
+
+
+data = data.frame(
+  ID = as.numeric(c(1:1)), # number of points and there coordinates below
+  longitude = as.numeric(c(153.025124)),
+  latitude = as.numeric(c(-27.469771))
+)
+
+# here is the data frame for all circles
+myCircles20 <- make_circles(data, 20) # this is in km therefore 0.45 is 450m
+```
+
+
+```{r}
+
+brisbane_spatial_polys_df %>%
+  leaflet(options = leafletOptions(dragging = TRUE)) %>%
+  addProviderTiles("Esri") %>%
+  addPolygons(weight = 1, color = "red", group = "SA2 Area Density",
+              # highlight polygons on hover
+              highlight = highlightOptions(weight = 5, color = "white",
+                                           bringToFront = TRUE)) %>%
+ setView(lng = 153.025124, lat = -27.469771, zoom = 10) %>%
+addCircleMarkers(data = QLD, lng = ~B_Lon, lat = ~B_Lat, radius = 1, color = "blue", label = ~P_Address, group = "Investor Locations") %>%
+  addLayersControl(overlayGroups = c("Investor Locations", "SA2 Area Density"))
+
+```
+
+
+
+```{r Brisbane Heat Map, echo=FALSE}
+
+# left join suburb data for investors
+house_data5 <- left_join(house_data2, entry_hd5, by = c("Entry_ID" = "Entry_ID")) 
+
+# filter data to BrisbaneLGA investors
+house_data6 <- house_data5 %>%
+  filter(Status.y == "Investor") %>%
+  filter(Buyer_Country == "Australia") %>%
+  filter(Suburb.y %in% Bris_SA2_List$SuburbName) 
+  
+# Join SA2 names for investor suburbs
+house_data7 <- left_join(house_data6, Bris_SA2_List, by = c("Suburb.y" = "SuburbName"))
+
+# Get Brisbane Coordinates
+  brisbane <- c(lon = 153.025124, lat = -27.469771)
+  
+# Get Brisbane Map  
+brisbane_map <- get_map(location = brisbane, zoom = 11, scale = 1)
+glimpse(brisbane_polygons)
+
+# create Polygon map of brisbane buyers
+ggmap(brisbane_map) +                                               # initialize ggplot object
+  geom_polygon(data = brisbane_polygons, aes(x = Lon, 
+                                             y = Lat, 
+                                             group = SA2_Name, 
+                                             fill = cut_number(No_Investors, 9)),
+                                             alpha = 0.8) +               
+  scale_fill_brewer("No. Investors Range", palette = "OrRd") + # fill with brewer colors 
+  ggtitle("Brisbane Investors of Inner Brisbane Houses") +
+  theme(line = element_blank(),                          # remove axis lines .. 
+        axis.text=element_blank(),                       # .. tickmarks..
+        axis.title=element_blank(),                      # .. axis labels..
+        panel.background = element_blank()) +            # .. background gridlines
+  coord_equal()                                          # set coordinate system
+ 
+
+```
+
+
+
+```{r Brisbane Point Map With Circles, echo=FALSE}
+
+# set create distance matrix from brisbane centre
+
+Distance_Dataframe2 <- house_data7 %>%
+  select(1,19:20)
+
+# Calculate Distance as new variable
+Distance_Dataframe2 <- Distance_Dataframe2 %>% rowwise() %>% 
+  mutate(Distance_FBrisbane = round(distHaversine(c(153.025124, -27.469771), c(B_Lon, B_Lat))/1000,3)) %>%
+  select(1,4)
+  
+# join distance from brisbane back to the house data
+house_data8 <- left_join(house_data7, Distance_Dataframe2, by = c("Entry_ID" = "Entry_ID"))
+
+# create classification for distance from brisbane
+house_data8 <- house_data8 %>%
+  mutate(ring_classification = ifelse(Distance_FBrisbane <= 5, "5km",
+                                      ifelse(Distance_FBrisbane > 5 & Distance_FBrisbane <= 10, "10km",
+                                             ifelse(Distance_FBrisbane >10 & Distance_FBrisbane <= 20, "20km", "More Than 20km"))))
+
+# create map with points and rings
+ggmap(brisbane_map) +                                               # initialize ggplot object
+  geom_point(data = house_data8, aes(x = B_Lon, 
+                                    y = B_Lat, group = ring_classification,
+                                    color = ring_classification), size = 0.7) +
+  scale_fill_brewer("No. Investors Range", palette = "OrRd") + # fill with brewer colors 
+  ggtitle("Brisbane Investors of Inner Brisbane Houses") +
+  theme(line = element_blank(),                          # remove axis lines .. 
+        axis.text=element_blank(),                       # .. tickmarks..
+        axis.title=element_blank(),                      # .. axis labels..
+        panel.background = element_blank()) +            # .. background gridline
+    geom_polygon(data = myCircles5, aes(lon, lat, group = ID), color = "red", alpha = 0, lwd = 1) +
+    geom_polygon(data = myCircles10, aes(lon, lat, group = ID), color = "orange", alpha = 0, lwd = 1) +
+    geom_polygon(data = myCircles20, aes(lon, lat, group = ID), color = "yellow", alpha = 0, lwd = 1)
+
+ 
+```
+
+
+```{r Summary of Buyers in Each Ring, echo=FALSE}
+
+# summarise rings
+
+ring_summary <- house_data8 %>%
+  group_by(ring_classification) %>%
+  summarise(Number = n()) %>%
+  filter(ring_classification != "More Than 20km")
+
+ring_summary <- ring_summary %>%
+  mutate(proportion = paste(round(Number/sum(Number)*100,0), "%", sep = ""))
+
+
+kable(ring_summary) %>%
+  kable_styling()
+
+
+```
+
+```{r Where are the Investors Buying Heatmap, echo=FALSE}
+
+
+# Removing space for match of SA2 Name
+house_data9 <- house_data8 %>%
+  mutate(Suburb.x = gsub('\\s+', '', Suburb.x)) 
+
+# Join SA2 Name to house sale 
+house_data9 <- left_join(house_data9, Bris_SA2_List, by = c("Suburb.x" = "SuburbName"))
+
+# Creating summary for match
+house_data9_summary <- house_data9 %>%
+  group_by(SA2Name.y) %>%
+  summarise(Number_of_Houses = n())
+
+# filter out only polygons for Inner Brisbane houses SA2 areas
+brisbane_polygons2 <- brisbane_polygons %>%
+  filter(toupper(SA2_Name) %in% house_data9_summary$SA2Name.y) %>%
+  mutate(SA2_Name = toupper(SA2_Name)) # create all upper case for next join
+
+# left join summary data
+
+brisbane_polygons2 <-  left_join(brisbane_polygons2, house_data9_summary, by = c("SA2_Name" = "SA2Name.y"))
+
+#Get zoomed brisbane map
+brisbane_map2 <- get_map(location = brisbane, zoom = 12, scale = 1)
+
+# Create heat map of property density where investors are buying
+ggmap(brisbane_map2) +                                               # initialize ggplot object
+  geom_polygon(data = brisbane_polygons2, aes(x = Lon, 
+                                             y = Lat, 
+                                             group = SA2_Name, 
+                                             fill = cut_number(Number_of_Houses, 9)),
+                                             alpha = 0.8) +              
+  scale_fill_brewer("No. Houses Range", palette = "OrRd") + # fill with brewer colors 
+  ggtitle("Brisbane Houses") +
+  theme(line = element_blank(),                          # remove axis lines .. 
+        axis.text=element_blank(),                       # .. tickmarks..
+        axis.title=element_blank(),                      # .. axis labels..
+        panel.background = element_blank())             # .. background gridlines
+```
+
+```{r Summary of House Sales in Suburbs, include=FALSE}
+
+house_data9_summary %>%
+  arrange(desc(Number_of_Houses)) %>%
+kable() %>%
+  kable_styling()
+
+
+
+
+```
+
+
+```{r Distance Summary 3 Ring Buyers, echo=FALSE}
+house_data9_summary2 <- house_data9 %>%
+   filter(ring_classification != "More Than 20km") %>%
+  group_by(ring_classification) %>%
+  summarise(Average_Distance = paste(round(mean(Distance),1), "km", sep = ""))
+
+kable(house_data9_summary2) %>%
+  kable_styling()
+
+
+```
+
+
+
+```{r Bedrooms they buy and Area they buy, echo=FALSE}
+
+
+house_data11 <- house_data9 %>%
+  mutate(Price_Bracket = ifelse(Price < 200000, "Under $200,000",
+                                ifelse(Price < 400000, "$200k to $400k",
+                                       ifelse(Price < 600000, "$400k to $600k",
+                                              ifelse(Price < 800000, "$600k to $800k",
+                                                     ifelse(Price <1000000, "800k to $1m", "$1m Plus"))))))
+  
+house_data11_summary <- house_data11 %>%
+  mutate(Bed = as.integer(Bed) - 1) %>%
+  filter(Bed < 11) %>%
+  group_by(Price_Bracket, Bed) %>%
+  summarise(Number = n()) 
+
+
+ggplot(house_data11_summary, aes(Bed, Price_Bracket, fill = Number)) +
+  geom_tile(stat = "identity") 
+
+
+
+
+```
+
+
+
+
+# Conclusion
+
+
+
+
+
+
+
+
+
+
+

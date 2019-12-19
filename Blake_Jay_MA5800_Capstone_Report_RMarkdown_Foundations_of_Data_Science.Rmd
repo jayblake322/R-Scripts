@@ -1,0 +1,449 @@
+---
+title: 'What Are Out of Brisbane Buyers Purchasing: A Look at Inner Brisbane'
+author: "Jay Blake | October 13, 2018"
+output: pdf_document
+latex_engine: xelatex
+mainfont: Times New Roman
+fontsize: 12pt
+---
+___________________________________________________________________________________
+### Abstract
+
+Recent property price appreciation in Sydney and Melbourne over in the five years ending 2017, and improving market fundamentals has created a increasingly positive outlook for Inner Brisbane property. Consistent with the infamous property ripple effect theory, this suggests that the wealth transfer effect should be currently occurring with this newly generated wealth from outside Brisbane making its way into the region. This report investigates current proportional trends of outside Brisbane buyers and their property preferences within the Inner Brisbane Region. Sales history of Inner Brisbane property from 2013 onwards has been analysed in this report to extract buyer locations and match that to various attributes of the purchased properties. Various data visualisation methods have been used to illustrate the findings including graphical representations of the data and plotting on geographical maps. The results of this analysis indicate a proportional decline of outside Brisbane buyers in the Inner Brisbane property market beginning in 2015. Current preferences for these buyers are towards apartments, particularly those with two bedrooms, in suburbs that have undergone considerable residential apartment development in recent years.  
+______________________________________________________
+```{r Setup, include=FALSE}
+
+# Document Set Up : Load Libraries
+
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(knitr)
+library(ggplot2)
+library(kableExtra)
+library(lubridate)
+library(jpeg)
+library(rasterImage)
+library(grid)
+library(gridExtra)
+
+```
+
+### Introduction
+
+Property price gains over the last five years in Sydney and Melbourne ending in 2017, have created a significant amount of wealth for property owners in these cities. In comparison, Inner Brisbane property prices have increased only modestly during the same period (Place Projects, 2018). As a result the cyclical difference in property prices between Brisbane and Sydney and Melbourne is currently near its greatest point. An increasingly positive outlook for Brisbane property suggests that the ripple effect's wealth transfer component should now be taking place (Meen, 1999), as is the current labour transfer component as indicated by the increased interstate migration to QLD from NSW (Australian Bureau of Statistics, 2018). As a result, a greater proportion of out of Brisbane buyers, particularly from NSW and VIC is expected. Considering the current market dynamics, the following objectives have been identified for investigation in this report. 
+
+1. Has the proportion of buyers of Inner Brisbane property from outside Brisbane been increasing during the past five years? 
+2. What is the most popular Inner Brisbane property purchased by out of Brisbane buyers? 
+3. In which suburbs do out of Brisbane buyers purchase property most frequently?
+    
+### Data
+
+One main dataset containing historical property sales data for Inner Brisbane is used for analyses in this report. An  additional datasets is used for data manipulation and contains postcodes of Brisbane suburbs. A third dataset contains plotting coordinates for geographical representation. Inner Brisbane suburbs are classified in Appendix 1.
+
+##### Data Source, Collection and Sample Size
+
+The sales data used in this report was sourced from PriceFinder (https://www.pricefinder.com.au/), an online property sales database used by industry professionals. This source is widely acceptable as highly accurate as the data entries originate from legal contracts of sale. As no direct interventions were made recording this data on this data it is considered observational. The postcode data set was sourced by the Electoral Commission of Queensland (2017). The original size of the main dataset is 233,197 accross 11 variables. However, only 8 variables from this dataset will be needed for this report and are listed in Table 1. 
+
+It should be noted that further processing of the number of beds variable is undertaken which varies the number of factor levels.
+
+##### Prior Data Processing
+
+The main data set has previously been rowbinded to join the sales data from every suburb after it was exported. Unit data has also been identified as either an apartment or townhouse using separate building data from the PriceFinder database. Due to the presence of logos and excel filters in the postcode dataset, the csv file was manipulated in excel to leave only a singular column of data which could then be read into R.
+
+```{r Data Variable Table, echo=FALSE, message=FALSE, warning=FALSE, fig.height=4, fig.width=6}
+
+# Insert the table of variables for this report
+
+variables <- c("Suburb", "Postcode", "Type", "Buyer Address", "Sale Price", "Sale Date", "Sale Year", "No. Beds")
+
+variable_type <- c("Unordered Factor (41 Levels)", "Unordered Factor (26 Levels)", "Unordered Factor (3 Levels)", "Character String", "Numeric Integer", "Date", "Numeric Integer", "Ordered Factor")
+
+variable_description <- c("Property Suburb", "Property Postcode", "Property type", "Property buyer Address", "Property Sale Price", "Property Sale Date", "Property Sale Year", "No. Beds")                   
+
+variable_data_table <- as.data.frame(cbind(variables, variable_type, variable_description))
+
+# Setting readable table and design 
+names_table <- c("Variable", "Type", "Description")
+
+kable(variable_data_table, col.names = names_table, caption = "Data Variable Summary") %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+                footnote(symbol = "Table of variables from the main dataset used in this report. ")
+```
+
+
+```{r Load Data: Primary Processing, include=FALSE}
+# Load data set up, inspect, name and filter
+
+# Sales Data
+sales_data <- read.csv("Assignment Data 1.csv", 
+                         sep = ",", dec = ".", header = TRUE, na.strings = "NA")
+
+# Various inspections of the dataset
+dim(sales_data) #233,197 rows - 12 variables
+
+# Select and filter only desired rows
+
+sales_data_selected <- sales_data %>%
+  select(2:8,10) %>% # select desired variables
+  filter(Year > 2012) # select data from 2013 onwards
+  
+names(sales_data_selected) <- c("Suburb", "Postcode", "Type", "Buyer_Address", "Sale_Price", "Sale_Date", "Sale_Year", "No_Beds") # change names
+    
+
+dim(sales_data_selected) # 47,080 rows - 8 variables
+
+# Load Brisbane LGA Postcodes Data
+BrisbaneLGA_Postcodes <- read.csv("Brisbane LGA postcodes.csv",
+                                  sep = ",", dec = ".", header = TRUE, na.strings = NA)
+
+dim(BrisbaneLGA_Postcodes) # 76 rows - 1 varable
+glimpse(BrisbaneLGA_Postcodes)
+
+# Change variable to class: factor
+BrisbaneLGA_Postcodes$Brisbane.LGA.Postcode <- as.factor(BrisbaneLGA_Postcodes$Brisbane.LGA.Postcode)
+
+# Load coordinates
+xy_coords <- read.csv("Inner Brisbane Suburbs X and Y Coords.csv", header = TRUE)
+
+```
+
+### Methods
+
+All analyses in this report are performed using RStudio (RStudio Team, 2016). In addition to Base R functions, the libraries: plyr, dplyr, Stringr, tidyr and lubridate were used for data pre-processing. The GGplot2, jpeg and rasterimage were used for data visualisation and Knitr, grid, gridExtra and kable extra were used for document presentation.
+
+Firstly, the three datasets were loaded into the R environment using the read.csv() function. To allow for missing values, the argument na.strings ="NA" was applied. The following methods relate to the main dataset unless stipulated otherwise.
+
+First, the variables were renamed using the names() function. The dataset was then reduced to the eight desired variables and sales data from 2013 onwards using select() and filter(). Classes of variables were checked with glimpse() and changes were made to the variables "postcode", "Buyer Address", "No. Beds", and "Sale Date" to be consistent with the stated classes using mutate() and the relevant as."type"() functions.
+
+```{r Process Data Types, include=FALSE}
+
+glimpse(sales_data_selected) # Check variable classes
+
+# adjust variable classes
+
+sales_data_selected <- sales_data_selected %>%
+             mutate(Postcode = as.factor(Postcode)) %>%
+             mutate(Buyer_Address = as.character(Buyer_Address, stringAsFactors = FALSE)) %>%
+             mutate(No_Beds = ordered(No_Beds)) %>%
+             mutate(Sale_Date = as.Date(Sale_Date, format = "%d/%m/%Y"))
+
+levels(sales_data_selected$No_Beds) # Checking level order
+
+```
+
+Two new variables were then created using mutate(). The first represents six month periods which allow for comparison of sales data over periods of time. This was created using an ifelse() function within mutate() and pasting the sale year with the sale period as the output.The levels were ordered using the levels() function. str_detect() was used to identify the presence of the abbreviated state i.e. "QLD" from within the buyer address using the ifelse() function. If one of the Australian states or territories was not identified then the result was "Other" and likely represents an overseas buyer. The variable sale year was then dropped from the dataset using select() as well as sales occuring after June 2018 using filter() as the December period is not complete. 
+```{r Data Pre-Processing: Mutated Variables, include=FALSE}
+
+# vector for levels of 6 month period variables
+six_Month_levels <- c("2013 J", "2013 D", "2014 J", "2014 D", "2015 J", "2015 D", "2016 J", "2016 D", "2017 J", "2017 D", "2018 J", "2018 D")
+
+# Create new varialbles for 6 month period, and buyer State
+
+sales_data_selected <- sales_data_selected %>%
+  mutate(Month = month(as.POSIXlt(Sale_Date))) %>%
+  mutate(Six_Month_Period = ifelse(Month < 7, paste(Sale_Year, "J"), paste(Sale_Year, "D"))) %>% # 6 month period variable
+  mutate(Six_Month_Period = as.factor(ordered(Six_Month_Period, 
+                                              levels = six_Month_levels))) %>% 
+  mutate(Buyer_State = ifelse(str_detect(Buyer_Address, "QLD"), "QLD",
+                       ifelse(str_detect(Buyer_Address, "NSW"), "NSW",
+                       ifelse(str_detect(Buyer_Address, "NT"), "NT",
+                       ifelse(str_detect(Buyer_Address, "VIC"), "VIC", 
+                       ifelse(str_detect(Buyer_Address, "SA"), "SA", 
+                       ifelse(str_detect(Buyer_Address, "WA"), "WA", 
+                       ifelse(str_detect(Buyer_Address, "TAS"), "TAS",
+                       ifelse(str_detect(Buyer_Address, "ACT"), "ACT", "OTHER"))))))))) %>%
+  select(-Month) %>% # Drop month variable
+  filter(Six_Month_Period != "2018 D") # June 2018 incomplete data
+
+levels(sales_data_selected$Six_Month_Period) # checking levels of six month period
+
+```
+
+Buyer state is then manipulated further by extracting the buyer postcode from buyer address using a combination of substr(),sapply() and strsplit(). These postcodes were matched against the Brisbane LGA Postcodes dataset using the %in% function. A postcode match "TRUE" and buyer state of "QLD" resulted in a change of buyer location to Brisbane using ifelse(), otherwise there was no change.
+
+```{r QLD Buyers Split, include=FALSE}
+
+# Manipulate Buyer_State variable to breakdown QLD
+
+sales_data_selected <- sales_data_selected %>%
+  mutate(Buyer_Postcode = substr(sapply(strsplit(Buyer_Address, "QLD, ", fixed = FALSE), "[",2), 1, 4)) %>%
+  mutate(BrisbaneLGA_Buyer = Buyer_Postcode %in% BrisbaneLGA_Postcodes$Brisbane.LGA.Postcode) %>%
+  mutate(Buyer_State = ifelse(Buyer_State == "QLD" & BrisbaneLGA_Buyer == "TRUE", "BRISBANE",
+                              ifelse(Buyer_State == "QLD" & BrisbaneLGA_Buyer == "FALSE", "QLD", Buyer_State)))
+
+```
+
+For objective two, a multi-level stratified imputation process is carried out on the number of beds variable to account for NAs. This method is desirable due to obvious differences in property type. Proportions of existing numbers of bedrooms are used to determine the number of imputations per number of bedrooms. The data is first filtered to include only the most recent June 2018 six month period where 25% of entries are NAs. The sale price is set to ascending order using arrange() before subsetting the data based on property type. Arranging the sale price allows for more expensive properties to receive more bedrooms when the vector of imputation values is entered.
+
+For each subset of data, a summary data table is created using filter(), group_by() and summarise(). First the NA values are filtered out. Then the data is grouped by the number of bedrooms and summarised by the total number in each group. The proportions of each number of bedrooms is included as a new variable and then multiplied by the number of NA values in the subset to determine how many times this number of bedrooms needs to be replicated for imputation. A vector is then created by using multiple rep()s within c() based on these values which is then used to replace the NA values in the data subset. Once values are imputed for all three subsets the data is recombined into a dataframe using as.data.frame(rbind()).
+
+```{r Bedroom Summary, Cleaning and Preparation for Imputation, include=FALSE, include=FALSE}
+
+# Filtering last 6 months of sales
+
+Sales_June_2018 <- sales_data_selected %>%
+  filter(Six_Month_Period == "2018 J") %>% 
+  arrange(Sale_Price) # set price order low to how
+
+# Replace factors of "0" with NA
+Sales_June_2018$No_Beds <- ifelse(Sales_June_2018$No_Beds == "0", NA, Sales_June_2018$No_Beds) #32052 NAs
+
+# change class for imputation 
+Sales_June_2018$No_Beds <- as.integer(Sales_June_2018$No_Beds)
+
+# get proportion of NAs
+sum(is.na(Sales_June_2018$No_Beds))/ nrow(Sales_June_2018) 
+```
+
+```{r Subsetting for Imputation, include=FALSE}
+
+# Subset for further cleaning and statification
+
+Houses <- filter(Sales_June_2018, Type == "House")
+Apartment <- filter(Sales_June_2018, Type == "Apartments")
+Townhouse <- filter(Sales_June_2018, Type == "Townhouses")
+
+```
+
+```{r Apartment Imputation, message=TRUE, warning=TRUE, include=FALSE}
+
+# number of NAs
+apartment_na <- sum(is.na(Apartment$No_Beds))
+
+# Summarise apartment data to get proportions and number/length for imputation values
+
+summary_apt <- Apartment %>%
+  filter(No_Beds != NA | No_Beds != 0) %>%
+  group_by(No_Beds) %>%
+  summarise(number = n()) %>%
+  mutate(prop = round(number/sum(number),2)) %>%
+  mutate(number_for_impute = round(prop*apartment_na))
+
+# get number of nas
+
+na_apt_values = c(rep(1, summary_apt[1,4]),
+                  rep(2, summary_apt[2,4]),
+                  rep(3, summary_apt[3,4]),
+                  rep(4, summary_apt[4,4]),
+                  rep(5, summary_apt[5,4]))
+
+length(na_apt_values) # check there is the right number of values for imputation
+
+I <- is.na(Apartment$No_Beds) # Identify rows with NA 
+Apartment$No_Beds[I] <- na_apt_values # Replace NA values 
+
+summary(as.factor(Apartment$No_Beds)) # check the imputation worked
+
+```
+
+```{r Townhouse Imputation, include=FALSE}
+
+# number of NAs
+townhouse_na <- sum(is.na(Townhouse$No_Beds))
+
+# Summarise townhouse data to get proportions and number/length for imputation values
+
+summary_th <- Townhouse %>%
+  filter(No_Beds != NA | No_Beds != 0) %>%
+  group_by(No_Beds) %>%
+  summarise(number = n()) %>%
+  mutate(prop = round(number/sum(number),2)) %>%
+  mutate(number_for_impute = round(prop*townhouse_na))
+
+# get number of nas
+
+na_th_values = c(rep(2, summary_th[1,4]),
+                  rep(3, summary_th[2,4]),
+                  rep(4, summary_th[3,4]),
+                  rep(7, summary_th[4,4]))
+
+length(na_th_values) # check there is the right number of values for imputation
+
+II <- is.na(Townhouse$No_Beds) # Identify rows with NA 
+Townhouse$No_Beds[II] <- na_th_values # Replace NA values 
+
+summary(as.factor(Townhouse$No_Beds)) # Check imputation worked
+
+```
+
+```{r House Imputation, include=FALSE}
+
+# number of NAs
+(house_na <- sum(is.na(Houses$No_Beds)))
+
+# Summarise townhouse data to get proportions and number/length for imputation values
+
+summary_house <- Houses %>%
+  filter(No_Beds != NA | No_Beds != 0) %>%
+  group_by(No_Beds) %>%
+  summarise(number = n()) %>%
+  mutate(prop = round(number/sum(number),2)) %>%
+  mutate(number_for_impute = round(prop*house_na))
+
+# get number of nas
+
+na_house_values = c(rep(2, summary_house[1,4]),
+                  rep(3, summary_house[2,4]),
+                  rep(4, summary_house[3,4]),
+                  rep(5, summary_house[4,4]),
+                  rep(6, summary_house[5,4]),
+                  rep(7, summary_house[6,4]),2)
+
+length(na_house_values) # check there is the right number of values for imputation
+
+# one value missing so the most common added to na vector
+
+III <- is.na(Houses$No_Beds) # Identify rows with NA 
+Houses$No_Beds[III] <- na_house_values # Replace NA values 
+
+summary(as.factor(Houses$No_Beds)) # Check imputation worked
+
+```
+
+```{r Combine Subsets, include=FALSE}
+sales_june2018_imputed <- as.data.frame(rbind(Apartment, Houses, Townhouse))
+sales_june2018_imputed$No_Beds <- as.factor(sales_june2018_imputed$No_Beds)
+
+summary(sales_june2018_imputed$No_Beds)
+
+```
+
+Graph 1, was created using geom_bar with position set to "fill". This allowed for the easy depiction of proportional differences over equal time periods. Graph 2 was created using geom_tile after filtering out all the "Brisbane" and "Other" buyers and creating a summary table using the group_by() function on Type and Number of bedrooms. The last graph includes a map of Brisbane which was loaded using readJPEG(). Coordinates were scaled to match suburbs to the map. Using a left_join, this data was added to the main dataset. Group_by() and summary() were used to creat a summary table including the number of sales and median price per suburb by out of Brisbane buyers which the points were scaled to. 
+
+### Results and Discussion
+
+As the potential for property price growth in Inner brisbane increases and significant equity has been created in NSW and VIC in the past five years, it would stand to reason that there would be an increasing proportion of interstate buyers, particularly from these two states present in the Inner Brisbane property market. However, Graph 1 depicts the opposite occurance. In the June 2018 six month period only 19.67% of 2496 sales were from out of Brisbane buyers in an evidently decreasing trend which first began occuring in the first half of 2015. However, as data from the Australian Bureau of Statistics indicates that interstate migration, particularly from NSW, is on the rise (ABS 2018), this greater proportion of Brisbane buyers is likely partly a result of newly settled residents purchasing property.
+
+```{r Graph 1 Objective 1, message=FALSE, warning=FALSE, include=FALSE}
+
+# number of sales in June 2018 six month period
+
+n1 <- nrow(Sales_June_2018) 
+
+n2 <- nrow(Sales_June_2018 %>%
+       filter(Buyer_State != "BRISBANE")) # number of not brisbane buyers
+
+n2/n1 # Proportion
+
+# Graph 1 - Objective 1: Proportion of buyers over time
+
+# Set colour scheme for graph
+
+colours1 <- c("red3", "coral4", "grey20", "maroon4", "darkorchid4", "gray13", "seagreen4", "green4", "skyblue4", "dodgerblue4")
+
+# Set fill order for graph
+sales_data_selected$Buyer_State <- factor(sales_data_selected$Buyer_State, levels =  c("OTHER", "NT", "ACT", "TAS", "SA", "WA", "VIC", "NSW", "QLD", "BRISBANE"))
+
+proportion_buyers <- ggplot(sales_data_selected) +
+  geom_bar(aes(x = Six_Month_Period, fill = Buyer_State), position = "fill") +
+       labs(title = "Graph 1: The Proportion of Brisbane Buyers is Increasing",
+       y = "Cumulative Proportion",
+       x = "Six Month Period",
+       caption = "Proportion of Inner Brisbane property buyers by locaton") +
+  scale_fill_manual("Buyer Location", values = colours1) +
+  theme_classic()
+
+```
+
+Graph 2 shows a visual representation of the types of properties that buyers from outside Brisbane are purchasing. The results shows that there is a clear preference for two bedroom apartments (39.39%) and apartments overall (74.89%) among these buyers. Overall, these buyers have favoured properties with one, two or three bedrooms over larger properties. Houses are also preferred over townhouses. 
+
+```{r Graph 2 Objective 2, echo=FALSE, message=FALSE, warning=FALSE, fig.align="center", fig.height=6, fig.width=15}
+
+# Graph 2 - Objective 2: What are the NSW Purchasers Buying
+
+# Filter out QLD and other buyers
+
+Interstate_Buyers <- sales_june2018_imputed %>%
+  filter(Buyer_State != "BRISBANE" & Buyer_State != "OTHER") 
+
+# Piping split because the dataframe will be needed later, whilst the summary is needed here
+
+Interstate_Buyers2 <- Interstate_Buyers %>%
+  group_by(Type, No_Beds) %>%
+  summarise(Number = n())
+  
+buying_what <- ggplot(Interstate_Buyers2, aes(No_Beds, Type, fill = Number)) +
+  geom_tile() +
+  labs(title = "Graph 2: Two Bedroom Apartments Are the Most Preferred",
+       x = "Number of Bedrooms",
+       y = "Property Type",
+       caption = "Most brought properties by type and number of bedrooms - 6 months to June 2018") +
+  theme_classic() + 
+  guides(title = "Number Bought")
+
+grid.arrange(proportion_buyers, buying_what, ncol = 2)
+
+```
+
+A map of Inner Brisbane is shown in Graph 3 with plotted points representing Inner Brisbane suburbs. These points are scaled based on the number of sales by out of Brisbane buyers in the six months to June 2018 and the median price spent per suburb. Labels are shown for the four suburbs with the most sales. Consistent with the preference for apartments, these four suburbs have all experienced significant apartment development over recent years as part of Inner Brisbane's "Apartment Boom" (Place Projects, 2016). Newstead was the most active suburb recording 44 sales and is argubaly the most transformed suburb with numerous apartment buildings being constructed there. This suggests that the majority of the apartments purcahsed by these buyers are from new developments.  In contrast, the established suburbs of Red Hill and Paddington have achieved the highest median prices paid by these buyers. These suburbs contain predominantly houses and have undergone minimal residential development. 
+
+```{r Objective 3, echo=FALSE, fig.align="center", fig.height=3, fig.width=6, message=FALSE, warning=FALSE}
+
+# Graph 3 - Objective 3: Suburbs by price and number
+
+# Load map
+img <- readJPEG("Inner Brisbane Map.jpg")
+
+Interstate_Buyers_Joined <- left_join(Interstate_Buyers, xy_coords, by = "Suburb") %>%
+  select(1,5,13:14) %>%
+  group_by(Suburb) %>%
+  summarise(Count = n(), Median_Price = median(Sale_Price/1000), x = mean(x), y = mean(y))
+
+map_plot <- ggplot(Interstate_Buyers_Joined, aes(x,y)) + 
+    annotation_custom(rasterGrob(img, width = unit(1, "npc"), height = unit(1,"npc"))) +
+      geom_point(aes(x,y, size = Count, colour = Median_Price)) +
+  labs(title = "Graph 3: Outside Brisbane Buyer Analysis",
+       x = NULL,
+       y = NULL,
+       caption = "Location of purchases by outside Brisbane buyers June 2018 period.") +
+   theme(axis.text.x = element_blank(),
+         axis.text.y = element_blank(),
+         axis.ticks.x = element_blank(),
+         axis.ticks.y = element_blank()) +
+  guides(colour = guide_legend(title="Median Price ($1,000s)"),
+         size = guide_legend(title = "Number of Sales"))
+
+# Select suburbs to label
+
+display_names <- Interstate_Buyers_Joined %>%
+  arrange(desc(Count)) 
+
+display_names1 <- display_names[1:4,1] # Put suburb names in a vector
+display_names1 <- display_names1$Suburb  
+
+# Display map with selected labels
+
+map_plot + geom_text(data = subset(Interstate_Buyers_Joined, Count > 30), aes(x, y, label = display_names1), position = position_dodge(width = 1), vjust = -1, size = 4)
+
+```
+
+### Conclusion
+
+This report intented to determine the trending proportion of out of Brisbane buyers in the Inner Brisbane market, what type of property they are buying and which suburbs of Brisbane these buyers purchase in most frequently. Despite the Ripple Effect theory indicating there would be an increasing proportion of these buyers in the current market, the results of the analysis revealed a decreasing trend. Furthermore, apartments in newly developed/rejuvenated residential areas, and particularly those with two bedrooms, were identified as the most sought after property type for out of Brisbane buyers. 
+
+These results have provided an interesting insight into the current Inner Brisbane market and have shown that the new residential development that has occured thorughout the region is sought after and desired. Therefore, if current trends continue, this type of development should be strongly considered in the futur. Furthermore, these results have identified a consumer product match for those employed in the real estate services industry. 
+
+This report was restricted by the limited number of variables available for analysis particularly data regarding total existing dwellings. It is suggested that the proportion of purchases for each property type be compared against the total proportion of these properties in the market. A further breakdown of the outside Brisbane buyer map into property type is also recommended for a more in depth understanding of the market.
+
+### Reference List
+
+Australian Bureau of Statistics. (2018). Annual Population Change - Year Ending 31 March 2018. Retrieved from http://www.abs.gov.au/Ausstats/ABS@.nsf/7d12b0f6763c78caca257061001cc588/fa9c11f1913bdafcca25765100098359!OpenDocument.
+
+Electoral Commission Queensland. (2017). Localities and postcodes list. Retrieved from https://www.ecq.qld.gov.au/electoral-boundaries/find-my-electorate.
+
+Meen, G. (1999). Regional house prices and the ripple effect: A new interpretation. *Housing Studies*, 14(6), 733-753. Retrieved from https://search-proquest-com.elibrary.jcu.edu.au/docview/211405320?pq-origsite=summon.
+
+Place Projects. (2016). Brisbane's Apartment Pipeline. Retrieved from http://www.placeprojects.com.au/brisbanes-apartment-pipeline-2016-to-2018/.
+
+Place Projects. (2018). Brisbane vs Sydney vs Melbourne. Retrieved from http://www.placeprojects.com.au/brisbane-vs-sydney-vs-melbourne/.
+
+RStudio Team (2016). RStudio: Integrated Development for R. RStudio, Inc., Boston, MA URL http://www.rstudio.com/.
+  
+### Appendix 1: Inner Brisbane Suburb List
+
+Albion, Alderley, Annerley, Auchenflower, Balmoral, Bowen Hills, BRisbane City, Bulimba, Coorparoo, Dutton Park, East Brisbane, Fairfield, Fortitude Valley, Greenslopes, Hawthorne, Herston, Highgate Hill, Kangaroo Point, Kelvin Grove, Milton, Morningside, New Farm, Newmarket, Newstead, Norman Park, Paddington, Red Hill, Seven Hills, South Brisbane, Spring Hill, ST Lucia, Taringa, Teneriffe, Toowong, West End, Wilston, Windsor, Woolloongabba, Wooloowin, Yeronga.
+
+
+

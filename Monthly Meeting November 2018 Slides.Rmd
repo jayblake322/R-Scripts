@@ -1,0 +1,165 @@
+---
+title: "Place Projects Monthly Meeting November 2018"
+author: "Jay Blake - Place Projects"
+date: "November 19, 2018"
+output: slidy_presentation
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(dplyr)
+library(plotly)
+library(dygraphs)
+library(forecast)
+library(tidyr)
+
+```
+
+
+## QLD Population Growth Rate Continues to Increase
+
+```{r QLD Population, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE, fig.align='center'}
+
+# Load population data
+population_data <- read.csv("R:/Projects/Jay/Jay Portfolio/R Projects/Monthly Meeting Files/Monthly Meeting November 2018/population data abs.csv")
+
+
+# Format date variable
+population_data_clean <- population_data %>%
+  mutate(Quarterly.Period = as.Date(Quarterly.Period, format = "%d-%b-%y"))
+
+# Spread data to extract vector of values
+population_data_spread <- spread(population_data_clean, Type.of.Increase, Net.Increase)
+
+# Impute values that went to different column in the right spot
+population_data_spread[36,4] = 6231
+population_data_spread[37,4] = 9001
+
+# extract values for into vectors for time series data
+Natural_Increase <- population_data_spread$`Natural increase`
+Interstate_Migration <- population_data_spread$`Interstate Migration`
+overseas_Migration <- population_data_spread$`Overseas Migration`
+
+# Combine vectors
+
+QLD_Population_Timeseries <- cbind(Natural_Increase, Interstate_Migration, overseas_Migration)
+ 
+# Convert data to time series
+QLD_Population_Timeseries <- ts(QLD_Population_Timeseries, start = c(2009, 1), end = c(2018, 1), frequency = 4)
+
+# Plot data on time series graph
+dygraph(QLD_Population_Timeseries, "Population Growth Rate to Queensland Increases Into 2018") %>%
+  dyStackedBarGroup(c('overseas_Migration', 'Interstate_Migration', 'Natural_Increase')) %>% # Add order of Stacked Bars
+  dyRangeSelector() %>% # Add Range Selector
+  dyAxis("y", label = "Net Population Increase") # Label of y-axis
+
+
+```
+
+
+## New Supply to the Brisbane Market is Drying Up
+
+
+```{r Brisbane New Apartment Supply, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE, fig.align='center'}
+
+# Load data
+left_data <- read.csv("R:/Projects/Jay/Jay Portfolio/R Projects/Monthly Meeting Files/Monthly Meeting November 2018/Apartment Report Left To Complete.csv")
+
+# Clean data
+left_data_clean <- left_data %>%
+  mutate(Left_To._Complete = as.integer(gsub("[%]", "", Left_To._Complete)))
+
+# Make plot
+ggplotly(ggplot(data = left_data_clean, mapping = aes(x = Period, y = Left_To._Complete, fill = Left_To._Complete)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Soon All Current New Apartment Supply WIll Complete Construction",
+       y = "Percentage Left to Complete Construction", 
+       x = "Year End") +
+  guides(fill = FALSE) +
+  theme_bw()) 
+```
+
+ - Little New Supply Coming
+ - Approximately 80% of current new supply purchased
+ - 8% DA Submissions are New Applications
+ - 60% of DA Submissions are Deferred or Abandoned
+
+## Brisbane Rental Vacancy Is Declining
+
+```{r Brisbane Vacancy Rate, message=FALSE, warning=FALSE, paged.print=FALSE, fig.align='center'}
+
+# Load vacancy data
+rental_vacancy_data <- read.csv("R:/Projects/Jay/Jay Portfolio/R Projects/Monthly Meeting Files/Monthly Meeting November 2018/Vacancy Rate Data Base REIQ.csv")
+
+
+# Change names of variable
+
+names(rental_vacancy_data) <- c("Period", "Greater.Brisbane", "Brisbane.LGA", "Inner..0.5km.", "Middle..5.20km.", "Outer.Brisban")
+
+# Clean and modify data
+rental_vacancy_data_clean <- rental_vacancy_data %>%
+  mutate(GB = as.numeric(gsub("[%]", "", Greater.Brisbane))) %>%
+  mutate(BLGA = as.numeric(gsub("[%]", "", Brisbane.LGA))) %>%
+  mutate(IB = as.numeric(gsub("[%]", "", Inner..0.5km.))) %>%
+  mutate(MB = as.numeric(gsub("[%]", "", Middle..5.20km.))) %>%
+  mutate(OB = as.numeric(gsub("[%]", "", Outer.Brisban))) %>%
+  mutate(Period = as.ordered(Period)) %>%
+  select(1,7:11)
+
+# Adjust ordered levels of period
+levels(rental_vacancy_data_clean) <- c("Jun-08", "Sep-08", "Mar-09",  "Sep-09", "Mar-10", "Sep-10", "Mar-11", "Jun-11", "Sep-11", "Dec-11", "Mar-12", "Jun-12", "Sep-12", "Dec-12", "Mar-13", "Jun-13", "Sep-13", "Dec-13", "Mar-14", "Jun-14", "Sep-14", "Dec-14", "Mar-15", "Jun-15", "Sep-15", "Dec-15", "Mar-16", "Jun-16", "Sep-16",  "Dec-16", "Mar-17", "Jun-17", "Sep-17", "Dec-17", "Mar-18", "Jun-18", "Sep-18") 
+
+# Extract values for time series data Brisbane LGA
+BrisbaneLGA <- rental_vacancy_data_clean$BLGA[17:37]
+
+# Extract values for time series data Inner Brisbane
+Inner_Brisbane <- rental_vacancy_data_clean$IB[17:37]
+
+# Join vectors of data
+Brisbane_Vacancy_Timeseries <- cbind(BrisbaneLGA, Inner_Brisbane)
+ 
+# Convert data to time series
+Brisbane_Vacancy_Timeseries <- ts(Brisbane_Vacancy_Timeseries, start = c(2013, 3), end = c(2018, 3), frequency = 4)
+
+# Plot time series graph
+dygraph(Brisbane_Vacancy_Timeseries, main = "Brisbane Vacancy is Tightening") %>%
+  dyRangeSelector() %>% # insert range selector
+  dyShading(from="2017-9-30", to="2018-9-30", color="#CCEBD6") %>% # Shading
+  dyAxis("y", label = "Vacancy Rate (%)", valueRange = c(0, 5)) # Label and range of y-axis
+
+
+
+```
+
+## Rental Prices Increasing Again As Vacancy Rate Falls and Supply Dries Up
+
+```{r Inner Brisbane Apartment Retal Prices, message=FALSE, warning=FALSE, paged.print=FALSE, fig.align='center'}
+
+# Load rental price data
+rental_data <- read.csv("R:/Projects/Jay/Jay Portfolio/R Projects/Monthly Meeting Files/Monthly Meeting November 2018/rental prices Inner Brisbane Apartments.csv")
+
+rental_data_clean <- rental_data %>%
+  mutate(Rent = as.integer(gsub("[$]", "", Apartment.Weekly.Rental.Price))) %>%
+  select(1,3)
+
+ggplotly(ggplot(rental_data_clean, aes(x = Year, y = Rent)) +
+  geom_line(stat = "identity", lwd = 2, color = "red") + 
+  labs(title = "Apartment Rental Prices Rebound in 2018",
+       y = "Average Weekly Asking Rent ($)", 
+       x = "Year") +
+  guides(fill = FALSE) +
+  scale_colour_manual(values = "red"))
+ 
+
+```
+
+## Whats Ahead in the Next Few Years?
+
+- Demand is now outstripping demand
+- supply to continue to be absorbed in 2019
+- Rental prices to begin to rise more quickly
+- With better rental returns and more competitive rental market more will look to buy
+- Sales volumes will increase
+- With the increased demand to buy a property prices will rise
+
+## Questions?
